@@ -1,0 +1,8 @@
+[project]
+name = "csw"
+version = "0.1.0"
+description = "Switch between OpenAI Codex accounts"
+requires-python = ">=3.10"
+
+[project.scripts]
+csw = "codex_switcher:main"
