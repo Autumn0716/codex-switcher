@@ -115,6 +115,10 @@ def _fmt_usage_short(usage: dict | None) -> str:
     """Format usage data for inline display: 5h% / weekly%."""
     if not usage:
         return f"{DIM}—{RST}"
+    if usage.get("error") == "token_expired":
+        return f"{BR_RED}expired{RST}"
+    if usage.get("error") == "forbidden":
+        return f"{BR_RED}403{RST}"
     rl = usage.get("rate_limit") or {}
     pw = rl.get("primary_window")
     sw = rl.get("secondary_window")
@@ -176,9 +180,11 @@ def _load_usage_for_item(info: dict) -> dict | None:
         token = data.get("tokens", {}).get("access_token", "")
         aid = data.get("tokens", {}).get("account_id", "")
         if not token or not aid:
+            print(f"  {ICON_WARN} Profile '{info['name']}' missing token or account_id", file=sys.stderr)
             return None
         return _fetch_usage(token, aid)
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"  {ICON_WARN} Cannot read profile '{info['name']}': {e}", file=sys.stderr)
         return None
 
 
@@ -194,7 +200,11 @@ def _prefetch_usage(items: list[dict]) -> threading.Event:
             item["usage"] = cached
             return
         # Fetch from API
-        usage = _load_usage_for_item(item)
+        try:
+            usage = _load_usage_for_item(item)
+        except Exception as e:
+            print(f"  {ICON_WARN} Failed to fetch usage for '{item['name']}': {e}", file=sys.stderr)
+            usage = None
         item["usage"] = usage
         _save_cached_usage(item["name"], usage)
 
@@ -218,6 +228,10 @@ def _parse_usage_windows(usage: dict | None) -> tuple[str, str]:
     """Return (5h_display, weekly_display) strings from usage data."""
     if not usage:
         return f"{DIM}—{RST}", f"{DIM}—{RST}"
+    if usage.get("error") == "token_expired":
+        return f"{BR_RED}expired{RST}", f"{BR_RED}expired{RST}"
+    if usage.get("error") == "forbidden":
+        return f"{BR_RED}403{RST}", f"{BR_RED}403{RST}"
     rl = usage.get("rate_limit") or {}
     pw = rl.get("primary_window")
     sw = rl.get("secondary_window")
@@ -607,6 +621,7 @@ def _fetch_usage(access_token: str, account_id: str) -> dict | None:
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0 or not result.stdout:
+            print(f"  {ICON_WARN} curl failed: {result.stderr.strip() or 'no output'}", file=sys.stderr)
             return None
         lines = result.stdout.strip().rsplit("\n", 1)
         body = lines[0]
@@ -616,9 +631,17 @@ def _fetch_usage(access_token: str, account_id: str) -> dict | None:
         if status == 403:
             return {"error": "forbidden"}
         if status != 200:
+            print(f"  {ICON_WARN} API returned HTTP {status}", file=sys.stderr)
             return None
         return json.loads(body)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+    except subprocess.TimeoutExpired:
+        print(f"  {ICON_WARN} Usage request timed out (>15s)", file=sys.stderr)
+        return None
+    except json.JSONDecodeError as e:
+        print(f"  {ICON_WARN} Invalid JSON from API: {e}", file=sys.stderr)
+        return None
+    except FileNotFoundError:
+        print(f"  {ICON_WARN} curl not found in PATH", file=sys.stderr)
         return None
 
 
