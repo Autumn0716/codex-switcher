@@ -1,5 +1,5 @@
 [project]
-name = "csw"
+name = "codex-switcher"
 version = "0.1.0"
 description = "Switch between OpenAI Codex accounts"
 requires-python = ">=3.10"
