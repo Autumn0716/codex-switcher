@@ -34,7 +34,7 @@ Requires: Python 3.10+, `uv` package manager.
 
 Use `codex login`to record the `auth.json` file,and `csw add <name>`to add your profile.Then you can use `csw ls`to switch your so many accounts easily.
 
-![](/Users/jiangxun/Library/Application%20Support/marktext/images/2026-04-15-10-52-33-image.png)
+![Usage](images/demo.png)
 
 ```
 csw add <name>        # Save current account as a profile
