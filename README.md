@@ -17,7 +17,7 @@ Lightweight CLI to switch between multiple OpenAI Codex accounts. Zero dependenc
 ### One-click install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Autumn0716/codex-switcher/main/install.sh | bash
+ curl -fsSL https://raw.githubusercontent.com/Autumn0716/codex-switcher/master/install.sh | bash
 ```
 
 ### Manual install
