@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "codex-switcher"
 version = "0.1.0"
@@ -6,3 +10,6 @@ requires-python = ">=3.10"
 
 [project.scripts]
 csw = "codex_switcher:main"
+
+[tool.setuptools]
+py-modules = ["codex_switcher"]
