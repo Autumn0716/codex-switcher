@@ -54,3 +54,11 @@ if command -v csw &>/dev/null; then
 else
     fail "Installation failed — csw not found in PATH"
 fi
+
+# ── Reload shell to pick up PATH ─────────────────────────────────────────────
+SHELL_NAME=$(basename "$SHELL")
+if [ -t 0 ] && command -v "$SHELL_NAME" &>/dev/null; then
+    echo ""
+    info "Reloading shell to ensure csw is in PATH..."
+    exec "$SHELL_NAME" -l
+fi
