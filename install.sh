@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # csw one-click installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/Autumn0716/codex-switcher/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/Autumn0716/codex-switcher/master/install.sh | bash
 # Or:    bash install.sh
 
 set -euo pipefail
