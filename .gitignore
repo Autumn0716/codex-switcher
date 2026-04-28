@@ -6,3 +6,5 @@ build/
 dist/
 *.egg-info/
 .cache/
+node_modules/
+src-tauri/target/
