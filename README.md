@@ -1,6 +1,6 @@
 # csw — Codex Switcher
 
-Lightweight CLI to switch between multiple OpenAI Codex accounts. Zero dependencies, Python stdlib only.
+Lightweight CLI and desktop app to switch between multiple OpenAI Codex accounts.
 
 ## Features
 
@@ -11,6 +11,7 @@ Lightweight CLI to switch between multiple OpenAI Codex accounts. Zero dependenc
 - **Token expiry check** — warns if access_token is expired before switching
 - **Process detection** — warns if Codex CLI is currently running
 - **Duplicate detection** — prevents saving the same account twice
+- **Desktop app** — Tauri app for macOS, Windows, and Linux
 
 ## Install
 
@@ -29,6 +30,32 @@ uv tool install .
 ```
 
 Requires: Python 3.10+, `uv` package manager.
+
+### Desktop app development
+
+The desktop app is built with Tauri v2, Rust, React, and TypeScript.
+
+```bash
+npm install
+npm run tauri:dev
+```
+
+Build a local desktop bundle:
+
+```bash
+npm run tauri:build
+```
+
+Platform requirements:
+
+- **macOS**: Xcode Command Line Tools (`xcode-select --install`). Signed public distribution requires an Apple Developer account and notarization.
+- **Windows**: Microsoft C++ Build Tools with "Desktop development with C++", Microsoft Edge WebView2 Runtime, and the Rust MSVC toolchain.
+- **Linux**: WebKitGTK 4.1 development packages and build tools. On Debian/Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
 
 ## Usage
 
@@ -53,6 +80,7 @@ csw mv <old> <new>    # Rename a profile
 - Usage data cached in `~/.csw/cache/<name>.json` (5 min TTL)
 - File permissions set to `0o600` for all sensitive files
 - Atomic writes via `temp + os.rename()`
+- The desktop app keeps token reads/writes in the Rust backend and only sends redacted display data to the UI.
 
 ## License
 
