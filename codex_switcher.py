@@ -537,6 +537,10 @@ def load_config() -> dict:
     return {}
 
 
+def get_account_id(data: dict) -> str:
+    return data.get("tokens", {}).get("account_id", "")
+
+
 def save_config(config: dict):
     SWITCHER_DIR.mkdir(parents=True, exist_ok=True)
     tmp = CONFIG_FILE.with_suffix(".tmp")
@@ -552,6 +556,16 @@ def update_active_profile():
         return
     target = PROFILES_DIR / f"{active}.json"
     if target.exists():
+        try:
+            current = json.loads(AUTH_FILE.read_text())
+            saved = json.loads(target.read_text())
+            current_aid = get_account_id(current)
+            saved_aid = get_account_id(saved)
+        except (json.JSONDecodeError, OSError):
+            return
+        if not current_aid or not saved_aid or current_aid != saved_aid:
+            print(f"  {ICON_WARN} Skipped updating '{active}' because current auth is a different account.")
+            return
         shutil.copy2(AUTH_FILE, target)
         os.chmod(target, 0o600)
 
@@ -837,7 +851,7 @@ def cmd_add(args):
 
     try:
         current = json.loads(AUTH_FILE.read_text())
-        current_aid = current.get("tokens", {}).get("account_id", "")
+        current_aid = get_account_id(current)
         dup = find_duplicate_account(current_aid, exclude_name=name)
         if dup:
             info = get_profile_info(PROFILES_DIR / f"{dup}.json")
@@ -848,9 +862,21 @@ def cmd_add(args):
             print(f"  {ICON_ARROW} New acct:\t{CYAN}codex login{RST}, then {CYAN}csw add {name}{RST}")
             sys.exit(1)
     except (json.JSONDecodeError, OSError):
+        current_aid = ""
         pass
 
     target = PROFILES_DIR / f"{name}.json"
+    if target.exists():
+        try:
+            existing = json.loads(target.read_text())
+            existing_aid = get_account_id(existing)
+        except (json.JSONDecodeError, OSError):
+            existing_aid = ""
+        if existing_aid != current_aid:
+            print(f"  {ICON_FAIL} Profile {BOLD}'{name}'{RST} already exists with a different account.")
+            print(f"  {ICON_ARROW} Use {CYAN}csw rm {name}{RST} first if you really want to replace it.")
+            sys.exit(1)
+
     content = AUTH_FILE.read_bytes()
     write_profile(target, content)
 
