@@ -1,13 +1,13 @@
-# Codex Switcher Tauri App Design
+# code-switcher Tauri App Design
 
 ## Goal
 
-Build a cross-platform desktop app for Codex Switcher using Tauri v2. The app manages the same local profile files as the CLI and keeps the overwrite protection behavior: profiles must never be silently replaced by a different `account_id`.
+Build a cross-platform desktop app for code-switcher using Tauri v2. The app manages the same local profile files as the CLI and keeps the overwrite protection behavior: profiles must never be silently replaced by a different `account_id`.
 
 ## Assumptions
 
 - Desktop only for the first version: macOS, Windows, and Linux.
-- The app name is `Codex Switcher`.
+- The app name is `code-switcher`.
 - The frontend is React with TypeScript and Vite.
 - The backend is Rust inside `src-tauri`, with no Python runtime dependency.
 - Existing storage remains compatible with the CLI:

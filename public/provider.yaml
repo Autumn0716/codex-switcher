@@ -1,0 +1,52 @@
+Overall: Codex在最新版本只支持ResponseAPI接口的模型;如有需要可以自行降级Codex为0.80.0版本(npm i -g @oepnai/codex@0.80.0),更新config.toml文件wire_api为chat;同时也请区分各厂商之间的Codingplan收费策略与Pay As You Go(PAYG);另,配置文件中openai(chat)表示该模型的chat/completions接口;openai(response)格式会直接写作codex;
+Zai:
+  descriptions: 只兼容Anthropic与Openai Completions接口
+  baseurl:
+    claude: https://api.z.ai/api/anthropic
+    openai(chat): https://api.z.ai/api/paas/v4
+
+Zai(coding plan):
+  descriptions: 兼容Anthropic与Openai Completions与Responses接口
+  baseurl:
+    claude: https://api.z.ai/api/coding/anthropic
+    openai(chat): https://api.z.ai/api/coding/paas/v4
+
+
+
+
+Qwen:
+  descriptions: 兼容Anthropic与Openai Completions与Responses接口;请注意API KEY格式应为sk-xxxxx;
+  baseurl:
+    claude: https://dashscope.aliyuncs.com/apps/anthropic
+    codex: https://dashscope.aliyuncs.com/compatible-mode/v1
+
+Qwen(coding paln):
+  descriptions: (coding plan)只兼容Anthropic与Openai Completions;请注意API KEY应为sk-sp-xxxxxxxx;
+  baseurl:
+    claude: https://coding.dashscope.aliyuncs.com/apps/anthropic
+    openai(chat): https://coding.dashscope.aliyuncs.com/compatible-mode/v1
+
+
+Deepseek:
+  descriptions:  只兼容Anthropic与Openai Completions接口
+  baseurl:
+    claude: https://api.deepseek.com/anthropic
+    openai(chat): https://api.deepseek.com
+
+MIMO(coding plan):
+  descriptions: (codingplan)只兼容Anthropic与Openai Completions接口
+  baseurl:
+    claude: https://token-plan-cn.xiaomimimo.com/anthropic
+    openai(chat): https://token-plan-cn.xiaomimimo.com/v1
+
+MIMO:
+  descriptions: 只兼容Anthropic与Openai Completions接口
+  baseurl:
+    claude: https://dashscope.aliyuncs.com/apps/anthropic
+    openai(chat): https://dashscope.aliyuncs.com/compatible-mode/v1
+
+Minimax:
+    descriptions: 只兼容Anthropic与Openai Completions接口
+  baseurl:
+    claude: https://api.minimaxi.com/anthropic
+    openai(chat): https://api.minimaxi.com/v1/

@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codex-switcher"
+name = "code-switcher"
 version = "0.1.0"
-description = "Switch between OpenAI Codex accounts"
+description = "Switch between local AI coding tool accounts"
 requires-python = ">=3.10"
 
 [project.scripts]
