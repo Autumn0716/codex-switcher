@@ -857,12 +857,21 @@ fn import_codex_auth_with_paths(
 }
 
 fn fetch_codex_provider_usage_with(profile: Value) -> AppResult<CodexUsageInfo> {
-    let Some(auth) = codex_auth_for_usage(&profile) else {
+    // Try profile's embedded auth first, then fall back to live ~/.codex/auth.json
+    let auth = codex_auth_for_usage(&profile)
+        .or_else(|| {
+            eprintln!("[usage] profile auth missing/stale, reading live ~/.codex/auth.json");
+            live_codex_auth()
+        });
+
+    let Some(auth) = auth else {
+        eprintln!("[usage] no auth available from profile or live file");
         return Ok(CodexUsageInfo {
             error: Some("missing_auth".to_string()),
             ..CodexUsageInfo::default()
         });
     };
+
     let mut info = codex_usage_identity(&auth);
     let access_token = auth
         .get("tokens")
@@ -881,8 +890,12 @@ fn fetch_codex_provider_usage_with(profile: Value) -> AppResult<CodexUsageInfo> 
         return Ok(info);
     }
 
+    eprintln!("[usage] fetching from API with account_id={}", &account_id[..8.min(account_id.len())]);
     match fetch_codex_usage_json(access_token, &account_id)? {
-        UsageFetchResult::Ok(usage) => Ok(codex_usage_info_from_value(info, &usage)),
+        UsageFetchResult::Ok(usage) => {
+            eprintln!("[usage] API success");
+            Ok(codex_usage_info_from_value(info, &usage))
+        }
         UsageFetchResult::TokenExpired => {
             info.error = Some("token_expired".to_string());
             Ok(info)
@@ -898,10 +911,23 @@ fn fetch_codex_provider_usage_with(profile: Value) -> AppResult<CodexUsageInfo> 
     }
 }
 
+fn live_codex_auth() -> Option<Value> {
+    let paths = CswPaths::production().ok()?;
+    if !paths.auth_file.exists() {
+        return None;
+    }
+    let auth = read_json(&paths.auth_file).ok()?;
+    if codex_auth_has_usage_credentials(&auth) && !token_expired(&auth, "access_token") {
+        Some(auth)
+    } else {
+        None
+    }
+}
+
 fn codex_auth_for_usage(profile: &Value) -> Option<Value> {
     let profile_auth = codex_auth_from_provider_profile(profile);
     if profile_auth.as_ref().is_some_and(|auth| {
-        codex_auth_has_usage_credentials(auth) && !token_expired(auth, "access_token")
+        codex_auth_has_usage_credentials(auth)
     }) {
         return profile_auth;
     }
@@ -1004,14 +1030,17 @@ fn fetch_codex_usage_json(access_token: &str, account_id: &str) -> AppResult<Usa
         .map_err(|source| AppError::Io { path: curl, source })?;
 
     if !output.status.success() || output.stdout.is_empty() {
+        eprintln!("[usage] curl failed: status={}, stdout_len={}, stderr={}", output.status, output.stdout.len(), String::from_utf8_lossy(&output.stderr));
         return Ok(UsageFetchResult::Unavailable);
     }
 
     let text = String::from_utf8_lossy(&output.stdout);
     let Some((body, status)) = text.trim_end().rsplit_once('\n') else {
+        eprintln!("[usage] could not split body/status from curl output, raw len={}", text.len());
         return Ok(UsageFetchResult::Unavailable);
     };
     let status = status.trim().parse::<u16>().unwrap_or(0);
+    eprintln!("[usage] curl HTTP status={}", status);
     match status {
         200 => serde_json::from_str(body)
             .map(UsageFetchResult::Ok)
@@ -1050,8 +1079,36 @@ fn codex_usage_info_from_value(mut info: CodexUsageInfo, usage: &Value) -> Codex
     }
 
     let rate_limit = usage.get("rate_limit").unwrap_or(&Value::Null);
-    info.five_hour = parse_codex_usage_window(rate_limit.get("primary_window"));
-    info.weekly = parse_codex_usage_window(rate_limit.get("secondary_window"));
+
+    // Classify windows by duration when limit_window_seconds is available.
+    // Otherwise fall back to positional mapping: primary→five_hour, secondary→weekly.
+    // Note: serde_json returns Some(&Value::Null) for JSON null, so filter those out.
+    let primary = rate_limit.get("primary_window").filter(|v| !v.is_null());
+    let secondary = rate_limit.get("secondary_window").filter(|v| !v.is_null());
+
+    if let Some(window) = primary {
+        let parsed = parse_codex_usage_window(Some(window));
+        let duration_secs = value_as_u64(window.get("limit_window_seconds"))
+            .or_else(|| value_as_u64(window.get("window_seconds")));
+        match duration_secs {
+            Some(d) if d <= 5 * 3600 => info.five_hour = parsed,
+            Some(_) => info.weekly = parsed,
+            None => info.five_hour = parsed, // no duration info → positional default
+        }
+    }
+
+    if let Some(window) = secondary {
+        let parsed = parse_codex_usage_window(Some(window));
+        let duration_secs = value_as_u64(window.get("limit_window_seconds"))
+            .or_else(|| value_as_u64(window.get("window_seconds")));
+        match duration_secs {
+            Some(d) if d <= 5 * 3600 => info.five_hour = parsed,
+            Some(_) if info.weekly.is_none() => info.weekly = parsed,
+            Some(_) => {} // weekly already set by primary
+            None => info.weekly = parsed, // no duration info → positional default
+        }
+    }
+
     info
 }
 
@@ -3308,6 +3365,39 @@ mod tests {
     }
 
     #[test]
+    fn codex_usage_info_parses_integer_used_percent_from_live_api() {
+        let auth = json!({
+            "tokens": {
+                "account_id": "acct-test",
+                "access_token": jwt(json!({"exp": 4_102_444_800u64}))
+            }
+        });
+        // Simulates the actual API response with integer used_percent
+        let usage = json!({
+            "plan_type": "free",
+            "rate_limit": {
+                "primary_window": {
+                    "used_percent": 26,
+                    "limit_window_seconds": 604800,
+                    "reset_after_seconds": 556627,
+                    "reset_at": 1778674583u64
+                },
+                "secondary_window": null
+            }
+        });
+
+        let info = codex_usage_info_from_value(codex_usage_identity(&auth), &usage);
+
+        // primary_window has limit_window_seconds=604800 (>5h) → weekly
+        assert!(info.five_hour.is_none(), "should be classified as weekly, not five_hour");
+        let weekly = info.weekly.expect("weekly should be parsed");
+        assert_eq!(weekly.used_percent.unwrap().round(), 26.0);
+        assert_eq!(weekly.remaining_percent.unwrap().round(), 74.0);
+        assert_eq!(weekly.reset_after_seconds, Some(556627));
+        assert_eq!(weekly.reset_at, Some(1778674583u64));
+    }
+
+    #[test]
     fn codex_usage_info_uses_usage_response_identity_when_token_identity_is_missing() {
         let auth = json!({
             "tokens": {
@@ -3458,5 +3548,68 @@ mod tests {
         assert!(validate_external_auth_url("https://example.com/oauth/authorize").is_err());
         assert!(validate_external_auth_url(" https://auth.openai.com/oauth/authorize").is_err());
         assert!(validate_external_auth_url("https://auth.openai.com/oauth/authorize\n").is_err());
+    }
+}
+
+#[cfg(test)]
+mod debug_test {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn debug_value_as_f64_integer() {
+        let v = json!({"used_percent": 26});
+        let up = v.get("used_percent");
+        assert!(up.is_some());
+        let as_f = value_as_f64(up);
+        assert!(as_f.is_some(), "value_as_f64 on integer 26 returned None");
+        assert_eq!(as_f.unwrap(), 26.0);
+    }
+
+    #[test]
+    fn debug_parse_window_direct() {
+        let window = json!({
+            "used_percent": 26,
+            "limit_window_seconds": 604800,
+            "reset_after_seconds": 556627,
+            "reset_at": 1778674583u64
+        });
+        eprintln!("window json: {window}");
+        let up = window.get("used_percent");
+        eprintln!("used_percent field: {up:?}");
+        let as_f = value_as_f64(up);
+        eprintln!("value_as_f64 result: {as_f:?}");
+        let parsed = parse_codex_usage_window(Some(&window));
+        eprintln!("parse_codex_usage_window result: {parsed:?}");
+        assert!(parsed.is_some(), "parse_codex_usage_window returned None");
+        let w = parsed.unwrap();
+        assert!(w.used_percent.is_some(), "used_percent is None after parse");
+        assert_eq!(w.used_percent.unwrap().round(), 26.0);
+    }
+
+    #[test]
+    fn e2e_live_api_free_account() {
+        let usage = json!({
+            "plan_type": "free",
+            "rate_limit": {
+                "allowed": true,
+                "limit_reached": false,
+                "primary_window": {
+                    "used_percent": 26,
+                    "limit_window_seconds": 604800,
+                    "reset_after_seconds": 554902,
+                    "reset_at": 1778674583u64
+                },
+                "secondary_window": null
+            }
+        });
+
+        let info = codex_usage_info_from_value(CodexUsageInfo::default(), &usage);
+
+        assert!(info.five_hour.is_none(), "free account should have no five_hour window");
+        let weekly = info.weekly.expect("weekly should be parsed from primary_window");
+        assert_eq!(weekly.used_percent.unwrap().round(), 26.0);
+        assert_eq!(weekly.remaining_percent.unwrap().round(), 74.0);
+        assert_eq!(weekly.reset_after_seconds, Some(554902));
+        assert_eq!(weekly.reset_at, Some(1778674583u64));
     }
 }

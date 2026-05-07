@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, startTransition } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -1479,7 +1479,8 @@ function ClaudeConfigEditor({
       className={`${mode === "dialog" ? "flex h-full min-h-0 flex-col" : "flex-1"} bg-gradient-to-br from-zinc-900/40 via-zinc-950 to-zinc-950`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >
       <header className="flex h-14 items-center justify-between border-b border-white/[0.04] px-8">
         <div className="flex items-center gap-3">
@@ -1802,7 +1803,8 @@ function CodexConfigEditor({
       className={`${mode === "dialog" ? "flex h-full min-h-0 flex-col" : "flex-1"} bg-gradient-to-br from-zinc-900/40 via-zinc-950 to-zinc-950`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >
       <header className="flex h-14 items-center justify-between border-b border-white/[0.04] px-8">
         <div className="flex items-center gap-3">
@@ -2011,7 +2013,7 @@ function GenericConfigEditor({
   };
 
   return (
-    <motion.main className={`${mode === "dialog" ? "flex h-full min-h-0 flex-col" : "flex-1"} bg-gradient-to-br from-zinc-900/40 via-zinc-950 to-zinc-950`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+    <motion.main className={`${mode === "dialog" ? "flex h-full min-h-0 flex-col" : "flex-1"} bg-gradient-to-br from-zinc-900/40 via-zinc-950 to-zinc-950`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
       <header className="flex h-14 items-center justify-between border-b border-white/[0.04] px-8">
         <div className="flex items-center gap-3">
           {mode === "page" && (
@@ -2123,20 +2125,20 @@ function usageTextColor(window?: CodexUsageWindow | null) {
   return "text-rose-300";
 }
 
-function usageErrorLabel(error?: string | null) {
+function usageErrorLabel(error?: string | null): { text: string; hint?: string } | null {
   if (!error) {
     return null;
   }
   if (error === "token_expired") {
-    return "token expired";
+    return { text: "Token expired", hint: "Re-login in config" };
   }
   if (error === "forbidden") {
-    return "403 forbidden";
+    return { text: "403 Forbidden", hint: "Check account access" };
   }
   if (error === "missing_auth") {
-    return "auth missing";
+    return { text: "No auth", hint: "Login in config" };
   }
-  return "usage unavailable";
+  return { text: "Unavailable" };
 }
 
 function formatUsageLabel(label: string) {
@@ -2178,20 +2180,9 @@ function codexUsageProfileKey(profile: CodexProfile) {
 }
 
 function codexProfileHasUsageAuth(profile: CodexProfile) {
-  try {
-    const auth = JSON.parse(profile.authJson || "{}") as {
-      tokens?: {
-        access_token?: string | null;
-        account_id?: string | null;
-      };
-    };
-    return Boolean(
-      auth.tokens?.access_token?.trim() &&
-      auth.tokens?.account_id?.trim()
-    );
-  } catch {
-    return false;
-  }
+  // Always allow — backend will fall back to live ~/.codex/auth.json
+  // if profile's embedded auth is missing or expired.
+  return profile.authMode === "chatgpt";
 }
 
 function ProfileGrid({
@@ -2228,9 +2219,10 @@ function ProfileGrid({
   return (
     <motion.main
       className="flex-1 bg-gradient-to-br from-zinc-900/30 via-zinc-950 to-zinc-950 relative"
-      initial={false}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4 }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* Subtle atmospheric glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -2287,19 +2279,20 @@ function ProfileGrid({
             return (
               <motion.div
                 key={`${brand.id}-${p.id}`}
-                className={`group relative rounded-2xl border overflow-hidden transition-all cursor-pointer min-h-[180px] ${
+                className={`group relative rounded-2xl border overflow-hidden cursor-pointer min-h-[180px] ${
                   isSelected
                     ? "bg-gradient-to-br from-white/[0.06] via-white/[0.035] to-white/[0.02]"
                     : isActiveOnly
-                    ? "bg-gradient-to-br from-white/[0.025] via-white/[0.012] to-white/[0.006] opacity-60 hover:opacity-80"
-                    : "bg-gradient-to-br from-white/[0.018] via-white/[0.008] to-white/[0.004] opacity-45 hover:opacity-70"
+                    ? "bg-gradient-to-br from-white/[0.025] via-white/[0.012] to-white/[0.006]"
+                    : "bg-gradient-to-br from-white/[0.018] via-white/[0.008] to-white/[0.004]"
                 }`}
-                style={{
+                animate={{
+                  opacity: isSelected ? 1 : isActiveOnly ? 0.6 : 0.45,
                   borderColor: isSelected ? cardAccent : isActiveOnly ? `${cardAccent}55` : "rgba(255,255,255,0.04)",
-                  boxShadow: isSelected ? `0 0 34px ${cardAccent}24` : "none",
+                  boxShadow: isSelected ? `0 0 34px ${cardAccent}24` : "0 0 0px rgba(0,0,0,0)",
                 }}
-                initial={false}
-                whileHover={{ y: -3, transition: { type: "spring", stiffness: 260, damping: 20 } }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                whileHover={{ y: -3, opacity: isSelected ? 1 : 0.8, transition: { type: "spring", stiffness: 260, damping: 20 } }}
                 onClick={() => onSelect(i)}
               >
                 {/* Hover glow */}
@@ -2307,18 +2300,32 @@ function ProfileGrid({
                   className="absolute inset-0 rounded-2xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                   style={{ boxShadow: `inset 0 1px 1px rgba(255,255,255,0.04), 0 0 20px ${cardAccent}08` }}
                 />
-                {isSelected && (
-                  <>
-                    <div
+                <AnimatePresence>
+                  {isSelected && (
+                    <motion.div
+                      key="selected-ring"
                       className="absolute inset-0 rounded-2xl pointer-events-none"
                       style={{ border: `1.5px solid ${cardAccent}` }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
                     />
-                    <div
+                  )}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {isSelected && (
+                    <motion.div
+                      key="selected-glow"
                       className="absolute inset-[1px] rounded-[15px] pointer-events-none"
                       style={{ boxShadow: `inset 0 0 20px ${cardAccent}12, 0 0 40px ${cardAccent}08` }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
                     />
-                  </>
-                )}
+                  )}
+                </AnimatePresence>
 
                 <div className="relative p-6 flex flex-col h-full">
                   <div className="flex items-start justify-between">
@@ -2366,15 +2373,22 @@ function ProfileGrid({
                         ) : usagePending && !p.usage ? (
                           <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-700">Usage pending</p>
                         ) : usageErrorLabel(p.usage?.error) ? (
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-700">
-                            {usageErrorLabel(p.usage?.error)}
-                          </p>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-600">
+                              {usageErrorLabel(p.usage?.error)!.text}
+                            </p>
+                            {usageErrorLabel(p.usage?.error)!.hint && (
+                              <p className="text-[9px] text-zinc-700">
+                                {usageErrorLabel(p.usage?.error)!.hint}
+                              </p>
+                            )}
+                          </div>
                         ) : (
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className={`grid gap-2 ${p.usage?.fiveHour && p.usage?.weekly ? 'grid-cols-2' : 'grid-cols-1'}`}>
                             {[
                               ["5h", p.usage?.fiveHour],
                               ["7d", p.usage?.weekly],
-                            ].map(([label, window]) => (
+                            ].filter(([, w]) => w).map(([label, window]) => (
                               <div key={label as string} className="rounded-md border border-white/[0.05] bg-black/20 px-2 py-1.5">
                                 <div className="flex items-start justify-between gap-2">
                                   <span className="text-[9px] uppercase tracking-[0.14em] text-zinc-600">{formatUsageLabel(label as string)}</span>
@@ -2493,6 +2507,14 @@ function AddProfileDialog({
 
 export default function App() {
   const [activeBrand, setActiveBrand] = useState<ProviderBrand>("claude");
+
+  useEffect(() => {
+    const splash = document.getElementById("splash");
+    if (splash) {
+      splash.classList.add("fade-out");
+      setTimeout(() => splash.remove(), 200);
+    }
+  }, []);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [activeProfileIdx, setActiveProfileIdx] = useState<number | null>(null);
   const [selectedProfileIdx, setSelectedProfileIdx] = useState<number | null>(null);
@@ -2590,7 +2612,8 @@ export default function App() {
             [profile.id]: { loading: false, profileKey, data: usage },
           }));
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("[usage] error for", profile.id, err);
           setCodexUsageById((prev) => ({
             ...prev,
             [profile.id]: {
@@ -2623,10 +2646,12 @@ export default function App() {
 
   const selectBrand = (id: ProviderBrand) => {
     setActiveBrand(id);
-    setViewMode("grid");
-    setActiveProfileIdx(null);
-    setSelectedProfileIdx(0);
-    setAddDraft(null);
+    startTransition(() => {
+      setViewMode("grid");
+      setActiveProfileIdx(null);
+      setSelectedProfileIdx(0);
+      setAddDraft(null);
+    });
   };
 
   const handleSelectProfile = (idx: number) => {
@@ -2852,7 +2877,7 @@ export default function App() {
       <AnimatePresence mode="wait">
         {viewMode === "grid" ? (
           <ProfileGrid
-            key="grid"
+            key={`grid-${brand.id}`}
             brand={brand}
             profiles={profiles}
             selectedIdx={selectedProfileIdx}
@@ -2870,7 +2895,7 @@ export default function App() {
         ) : activeProfileIdx !== null && profiles[activeProfileIdx] ? (
           activeBrand === "claude" ? (
             <ClaudeConfigEditor
-              key={`config-${activeBrand}`}
+              key={`config-${activeBrand}-${activeProfileIdx}`}
               profile={claudeProfiles[activeProfileIdx]}
               onSave={handleSaveClaude}
               onBack={goBack}
@@ -2878,7 +2903,7 @@ export default function App() {
             />
           ) : activeBrand === "codex" ? (
             <CodexConfigEditor
-              key={`config-${activeBrand}`}
+              key={`config-${activeBrand}-${activeProfileIdx}`}
               profile={codexProfiles[activeProfileIdx]}
               onSave={handleSaveCodex}
               onBack={goBack}
@@ -2886,7 +2911,7 @@ export default function App() {
             />
           ) : (
             <GenericConfigEditor
-              key={`config-${activeBrand}`}
+              key={`config-${activeBrand}-${activeProfileIdx}`}
               brand={brand}
               profile={geminiProfiles[activeProfileIdx]}
               onSave={handleSaveGemini}
