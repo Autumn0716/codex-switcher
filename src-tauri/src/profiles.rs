@@ -315,6 +315,21 @@ pub fn save_and_activate_provider_profile(
 }
 
 #[tauri::command]
+pub fn remove_provider_profile(brand: String, id: String) -> AppResult<ProviderProfilesState> {
+    let paths = CswPaths::production()?;
+    let dir = paths.provider_profiles_dir(&brand);
+    let filename = sanitize_path_segment(&id);
+    let path = dir.join(format!("{filename}.json"));
+    if path.exists() {
+        fs::remove_file(&path).map_err(|source| AppError::Io {
+            path: path.clone(),
+            source,
+        })?;
+    }
+    read_provider_profiles(&paths, &brand)
+}
+
+#[tauri::command]
 pub fn start_codex_login() -> AppResult<CodexLoginLaunch> {
     let paths = CswPaths::production()?;
     let previous_modified_at = modified_seconds(&paths.auth_file)?;

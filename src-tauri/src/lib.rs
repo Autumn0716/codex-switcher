@@ -17,6 +17,7 @@ pub fn run() {
             profiles::save_provider_profile,
             profiles::activate_provider_profile,
             profiles::save_and_activate_provider_profile,
+            profiles::remove_provider_profile,
             profiles::start_codex_login,
             profiles::import_codex_auth,
             profiles::fetch_codex_provider_usage,

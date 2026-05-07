@@ -1,12 +1,43 @@
-.DS_Store
-.venv/
-__pycache__/
-*.pyc
-build/
-dist/
-target/
-*.egg-info/
-.cache/
+# Dependencies
 node_modules/
+.venv/
+uv.lock
+
+# Build outputs
+dist/
 src-tauri/target/
-.gitnexus
+target/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env.local
+.env*.local
+
+# Tauri generated schemas (auto-generated on build)
+src-tauri/gen/
+
+# Python CLI legacy (Tauri app replaces it)
+codex_switcher.py
+pyproject.toml
+tests/
+.pytest_cache/
+
+# OpenSpec / AI agent files (not part of the shipped product)
+openspec/
+.claude/
+.codex/
+AGENTS.md
+CLAUDE.md
+todolist.md
+docs/
+images/
+
+# GitNexus
+.gitnexus/

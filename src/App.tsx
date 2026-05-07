@@ -15,6 +15,7 @@ import {
   Check,
   Code,
   ArrowClockwise,
+  Trash,
 } from "@phosphor-icons/react";
 
 /* ─── Brand icon wrappers ─── */
@@ -1452,6 +1453,7 @@ function ClaudeConfigEditor({
     setLocal((prev) => ({
       ...prev,
       vendorId: vendor?.id,
+      name: vendor?.name ?? prev.name,
       ...(vendor?.baseUrls.claude ? { baseUrl: vendor.baseUrls.claude } : {}),
     }));
   }, []);
@@ -1667,6 +1669,7 @@ function CodexConfigEditor({
     setLocal((prev) => ({
       ...prev,
       vendorId: vendor?.id,
+      name: vendor?.name ?? prev.name,
       ...(vendor
         ? vendor.baseUrls.codex
           ? { baseUrl: vendor.baseUrls.codex }
@@ -2008,6 +2011,7 @@ function GenericConfigEditor({
     setLocal((prev) => ({
       ...prev,
       vendorId: vendor?.id,
+      name: vendor?.name ?? prev.name,
       ...(vendor?.baseUrls.claude ? { baseUrl: vendor.baseUrls.claude } : {}),
     }));
   };
@@ -2199,6 +2203,7 @@ function ProfileGrid({
   onAdd,
   onActivate,
   onRefreshUsage,
+  onDelete,
 }: {
   brand: BrandMeta;
   profiles: ProfileCardInfo[];
@@ -2213,16 +2218,17 @@ function ProfileGrid({
   onAdd: () => void;
   onActivate: (idx: number) => void;
   onRefreshUsage: () => void;
+  onDelete: (idx: number) => void;
 }) {
   const Icon = brand.icon;
 
   return (
     <motion.main
       className="flex-1 bg-gradient-to-br from-zinc-900/30 via-zinc-950 to-zinc-950 relative"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* Subtle atmospheric glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -2247,12 +2253,12 @@ function ProfileGrid({
         )}
       </header>
 
-      <section className="overflow-y-auto p-8 lg:p-12">
+      <section className="overflow-y-auto p-8 lg:p-12" style={{ scrollbarGutter: "stable" }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Add Card */}
           <motion.div
             key={`add-${brand.id}`}
-            className="flex items-center justify-center rounded-2xl border border-dashed border-white/[0.08] bg-gradient-to-br from-white/[0.01] to-transparent cursor-pointer hover:bg-gradient-to-br hover:from-white/[0.025] hover:border-white/[0.15] transition-all min-h-[180px]"
+            className="flex items-center justify-center rounded-2xl border border-dashed border-white/[0.08] bg-gradient-to-br from-white/[0.01] to-transparent cursor-pointer hover:bg-gradient-to-br hover:from-white/[0.025] hover:border-white/[0.15] transition-all min-h-[240px]"
             initial={false}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -2279,7 +2285,7 @@ function ProfileGrid({
             return (
               <motion.div
                 key={`${brand.id}-${p.id}`}
-                className={`group relative rounded-2xl border overflow-hidden cursor-pointer min-h-[180px] ${
+                className={`group relative rounded-2xl border overflow-hidden cursor-pointer min-h-[240px] ${
                   isSelected
                     ? "bg-gradient-to-br from-white/[0.06] via-white/[0.035] to-white/[0.02]"
                     : isActiveOnly
@@ -2328,21 +2334,40 @@ function ProfileGrid({
                 </AnimatePresence>
 
                 <div className="relative p-6 flex flex-col h-full">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <div
                       className="flex h-10 w-10 items-center justify-center rounded-xl"
                       style={{ backgroundColor: cardAccentBg }}
                     >
                       <CardIcon size={22} />
                     </div>
-                    {isActive && (
-                      <span
-                        className="rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] font-semibold backdrop-blur-md"
-                        style={{ color: cardAccent, backgroundColor: `${cardAccent}14`, border: `1px solid ${cardAccent}20` }}
-                      >
-                        Active
-                      </span>
-                    )}
+                    <div className="ml-auto flex items-center gap-2">
+                      {vendor?.isCodingPlan && (
+                        <span
+                          className="rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] font-semibold backdrop-blur-md"
+                          style={{ color: cardAccent, backgroundColor: `${cardAccent}14`, border: `1px solid ${cardAccent}20` }}
+                        >
+                          CP
+                        </span>
+                      )}
+                      {isActive && (
+                        <span
+                          className="rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] font-semibold backdrop-blur-md"
+                          style={{ color: cardAccent, backgroundColor: `${cardAccent}14`, border: `1px solid ${cardAccent}20` }}
+                        >
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.stopPropagation(); }}
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(i); }}
+                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash size={14} />
+                    </button>
+
                   </div>
 
                   <div className="mt-4">
@@ -2658,6 +2683,30 @@ export default function App() {
     setSelectedProfileIdx(idx);
   };
 
+  const [deleteTarget, setDeleteTarget] = useState<{ idx: number; name: string } | null>(null);
+
+  const handleDeleteProfile = (idx: number) => {
+    const profile = profiles[idx];
+    if (!profile) return;
+    setDeleteTarget({ idx, name: profile.name });
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const profile = profiles[deleteTarget.idx];
+    if (!profile) { setDeleteTarget(null); return; }
+
+    invoke<ProviderState>("remove_provider_profile", { brand: activeBrand, id: profile.id })
+      .then((state) => {
+        updateBrandState(activeBrand, state);
+        setSelectedProfileIdx(null);
+      })
+      .catch((err) => {
+        console.error("Failed to delete profile:", err);
+      });
+    setDeleteTarget(null);
+  };
+
   const handleRefreshCodexUsage = () => {
     if (Object.values(codexUsageById).some((state) => state.loading)) {
       return;
@@ -2775,8 +2824,26 @@ export default function App() {
     }
   };
 
+  const generateProfileId = (brand: ProviderBrand, vendorId?: string): string => {
+    const ts = () => {
+      const d = new Date();
+      return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+    };
+    if (vendorId) {
+      const existing = brand === "claude"
+        ? claudeProfiles
+        : brand === "codex"
+        ? codexProfiles
+        : geminiProfiles;
+      const idTaken = existing.some((p) => p.id === vendorId);
+      if (!idTaken) return vendorId;
+      return `${vendorId}-${ts()}`;
+    }
+    return `${brand}-${ts()}`;
+  };
+
   const handleAdd = () => {
-    const id = `${activeBrand}-${Date.now()}`;
+    const id = generateProfileId(activeBrand);
     if (activeBrand === "claude") {
       const base = claudeProfiles[0];
       const newProfile: ClaudeProfile = {
@@ -2813,6 +2880,9 @@ export default function App() {
     }
 
     const draftBrand = addDraft.brand;
+    const id = generateProfileId(draftBrand, profile.vendorId);
+    const profileWithFinalId = { ...profile, id };
+
     const nextIndex =
       draftBrand === "claude"
         ? claudeProfiles.length
@@ -2820,18 +2890,18 @@ export default function App() {
         ? codexProfiles.length
         : geminiProfiles.length;
     if (draftBrand === "claude") {
-      setClaudeProfiles((prev) => [...prev, profile as ClaudeProfile]);
+      setClaudeProfiles((prev) => [...prev, profileWithFinalId as ClaudeProfile]);
     } else if (draftBrand === "codex") {
-      setCodexProfiles((prev) => [...prev, profile as CodexProfile]);
+      setCodexProfiles((prev) => [...prev, profileWithFinalId as CodexProfile]);
     } else {
-      setGeminiProfiles((prev) => [...prev, profile as GenericProfile]);
+      setGeminiProfiles((prev) => [...prev, profileWithFinalId as GenericProfile]);
     }
 
     setSelectedProfileIdx(nextIndex);
     setAddDraft(null);
 
     try {
-      const state = await invoke<ProviderState>("save_provider_profile", { brand: draftBrand, profile });
+      const state = await invoke<ProviderState>("save_provider_profile", { brand: draftBrand, profile: profileWithFinalId });
       updateBrandState(draftBrand, state, activeProfileIds[draftBrand]);
     } catch {
       // Browser/Vite dev fallback: the local provider card stays in place.
@@ -2891,6 +2961,7 @@ export default function App() {
             onAdd={handleAdd}
             onActivate={handleActivateProfile}
             onRefreshUsage={handleRefreshCodexUsage}
+            onDelete={handleDeleteProfile}
           />
         ) : activeProfileIdx !== null && profiles[activeProfileIdx] ? (
           activeBrand === "claude" ? (
@@ -2930,6 +3001,37 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDeleteTarget(null)}>
+          <motion.div
+            className="w-[340px] rounded-2xl border border-white/[0.08] bg-zinc-900 p-6 shadow-2xl"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[15px] font-semibold text-zinc-100">Delete Profile</h3>
+            <p className="mt-2 text-[13px] text-zinc-400">
+              Delete <span className="text-zinc-200 font-medium">"{deleteTarget.name}"</span>? This removes the config file and cannot be undone.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[11px] uppercase tracking-[0.12em] font-medium text-zinc-400 hover:text-zinc-200 hover:border-white/[0.16] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="rounded-lg bg-red-600 hover:bg-red-500 px-4 py-2 text-[11px] uppercase tracking-[0.12em] font-medium text-white transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
