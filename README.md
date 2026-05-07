@@ -94,25 +94,105 @@ Coding Plan 类型的供应商（Zai Coding、Qwen Coding、Mimo Coding）卡片
 
 ## 快速开始
 
-### 前置要求
+### 方式一：直接下载 DMG（推荐，仅 macOS）
 
-- **Rust 工具链** — `rustup default stable`
-- **Node.js** — v20 或以上
+1. 前往 [GitHub Releases](https://github.com/Autumn0716/code-switcher/releases) 下载最新版 `.dmg` 文件
+2. 双击 `.dmg` 文件打开，将 `code-switcher.app` 拖入「应用程序」文件夹
+3. 双击打开即可使用
 
-### 开发模式
+> 首次打开时 macOS 可能会提示「无法验证开发者」，请前往 **系统设置 > 隐私与安全性 > 仍要打开**。
+
+### 方式二：从源码编译（macOS / Linux / Windows）
+
+#### 第 1 步：克隆仓库
+
+```bash
+git clone https://github.com/Autumn0716/code-switcher.git
+cd code-switcher
+```
+
+#### 第 2 步：安装 Rust 工具链
+
+访问 [https://rustup.rs](https://rustup.rs) 或在终端执行：
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+安装完成后确认：
+
+```bash
+rustc --version   # 应显示类似 rustc 1.xx.x
+cargo --version   # 应显示类似 cargo 1.xx.x
+```
+
+#### 第 3 步：安装 Node.js
+
+推荐使用 [fnm](https://github.com/Schniz/fnm) 或 [nvm](https://github.com/nvm-sh/nvm) 管理 Node 版本：
+
+```bash
+# 使用 fnm 安装 Node.js v20
+curl -fsSL https://fnm.vercel.app/install | bash
+fnm install 20
+fnm use 20
+```
+
+或者前往 [nodejs.org](https://nodejs.org) 下载安装包。
+
+确认安装：
+
+```bash
+node -v   # 应 >= v20
+npm -v    # 应 >= 10
+```
+
+#### 第 4 步：安装前端依赖
 
 ```bash
 npm install
-npm run app:dev          # Tauri 桌面应用 + Vite 开发服务器
 ```
 
-`npm run app:dev` 是日常开发入口。前端改动会热重载到运行中的应用。Rust 后端改动需要重新构建或重启。
+等待安装完成（首次可能需要几分钟，取决于网络速度）。
 
-纯 Vite 模式仅用于浏览器 UI 检查（无法调用 Tauri 命令）：
+#### 第 5 步：启动开发模式
 
 ```bash
-npm run dev
+npm run app:dev
 ```
+
+此时会同时启动 Vite 开发服务器和 Tauri 桌面应用窗口。前端代码修改会自动热重载，Rust 代码修改需要重启应用。
+
+#### 第 6 步：构建正式版应用
+
+macOS：
+
+```bash
+# 构建 .app 应用包
+npm run tauri:build
+
+# 或构建 .dmg 安装文件
+npm run tauri:build:dmg
+```
+
+构建完成后，应用包位于：
+
+```
+src-tauri/target/release/bundle/macos/code-switcher.app        # 应用
+src-tauri/target/release/bundle/dmg/code-switcher_0.1.0_aarch64.dmg   # 安装包
+```
+
+Linux：
+
+```bash
+npm run linux:build        # .deb、.rpm、.AppImage
+npm run linux:build:docker # 从 macOS 使用 Docker 包装
+```
+
+Windows：
+
+1. 安装 [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+2. 安装 Rust MSVC toolchain：`rustup toolchain install stable-msvc`
+3. 运行 `npm run tauri:build`
 
 ### 本地文件测试
 
@@ -144,26 +224,6 @@ model_auto_compact_token_limit = 900000
 model_reasoning_effort = "xhigh"
 approvals_reviewer = "user"
 ```
-
-### 构建桌面应用
-
-macOS：
-
-```bash
-npm run tauri:build        # .app 应用包
-npm run tauri:build:dmg    # .dmg 安装文件
-```
-
-构建产物位置：`src-tauri/target/release/bundle/macos/code-switcher.app`
-
-Linux（需要 Linux 环境）：
-
-```bash
-npm run linux:build        # .deb、.rpm、.AppImage
-npm run linux:build:docker # 从 macOS 使用 Docker 包装
-```
-
-Windows：安装 Microsoft C++ Build Tools + Rust MSVC 工具链，然后运行 `npm run tauri:build`。
 
 ## CLI 命令行工具
 
