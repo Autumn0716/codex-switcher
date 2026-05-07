@@ -2,8 +2,6 @@
 
 多 AI 提供商账号管理桌面应用。在 Claude Code、Codex、Gemini 和任意 OpenAI 兼容端点之间自由切换，无需手动编辑配置文件。
 
-**[Tauri v2 桌面应用]** + **[Python CLI (`csw`)]** — 两套界面，同一份配置存储。
-
 ![应用图标](images/icon.png)
 
 ## 界面预览
