@@ -38,4 +38,9 @@ CLAUDE.md
 todolist.md
 openspec/
 docs/
-images/
+
+# Screenshots (README images) — only these two are tracked
+images/*.png
+!images/icon.png
+!images/readme1.png
+!images/readme2.png

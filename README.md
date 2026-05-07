@@ -1,131 +1,139 @@
 # Code Switcher
 
-Desktop application for managing multiple AI provider accounts. Switch between Claude, Codex, Gemini, and any OpenAI-compatible endpoint — without manually editing config files.
+多 AI 提供商账号管理桌面应用。在 Claude Code、Codex、Gemini 和任意 OpenAI 兼容端点之间自由切换，无需手动编辑配置文件。
 
-**[Tauri v2 Desktop App]** + **[Python CLI (`csw`)]** — two interfaces, one profile store.
+**[Tauri v2 桌面应用]** + **[Python CLI (`csw`)]** — 两套界面，同一份配置存储。
 
-## Core Capabilities
+![应用图标](images/icon.png)
 
-### Profile Management
+## 界面预览
 
-Save provider JSON files for each supported tool, then select or activate them from the desktop UI.
+![主界面](images/readme1.png)
 
-- **Add Profile** — Opens the edit-config dialog; `Confirm` creates one provider card and one JSON file
-- **Edit Config** — Updates provider fields and generated config content
-- **Save** — Activates the selected provider for that brand
-- **Delete** — Removes a single provider with dark-themed confirmation dialog
+![配置编辑](images/readme2.png)
 
-Each card represents exactly one provider JSON file under `~/.csw/config/<brand>/`.
+## 核心功能
 
-### Vendor-Based Profile Naming
+### 配置文件管理
 
-Profile files are named after the selected vendor (e.g. `zai.json`, `deepseek.json`, `qwen.json`) instead of opaque timestamp IDs. When a vendor file already exists, a human-readable timestamp suffix is appended (e.g. `deepseek-20260507-1530.json`).
+为每个支持的编程工具保存提供商 JSON 文件，然后从桌面界面选择或激活。
 
-### Custom Provider Editor
+- **添加配置** — 打开编辑对话框；点击「确认」创建一个新的提供商卡片和 JSON 文件
+- **编辑配置** — 更新提供商字段并生成对应的配置内容
+- **保存** — 激活选中品牌的提供商
+- **删除** — 通过暗色主题确认弹窗删除单个提供商
 
-Connect any OpenAI-compatible API endpoint as a first-class provider.
+每张卡片对应 `~/.csw/config/<brand>/` 下的一个 JSON 文件。
 
-- Enter the API base URL, model name, and API key
-- The app generates a valid `auth.json` and `config.toml` for the target tool
-- API keys are never displayed in full — previews show only the first and last 4 characters
-- Existing files are backed up with timestamps before being overwritten
+### 基于供应商的文件命名
 
-### Coding Plan Badge
+配置文件以供应商名称命名（如 `zai.json`、`deepseek.json`、`qwen.json`），而非无意义的时间戳 ID。当同名供应商文件已存在时，自动添加人类可读的时间戳后缀（如 `deepseek-20260507-1530.json`）。
 
-Cards for Coding Plan vendors (Zai Coding, Qwen Coding, Mimo Coding) display a **CP** badge, visually distinguishing them from standard plans.
+### 自定义提供商编辑器
 
-### Provider Dashboard
+将任意 OpenAI 兼容 API 端点接入为首选提供商。
 
-At-a-glance view of each provider's configuration:
+- 输入 API 基础 URL、模型名称和 API 密钥
+- 自动生成目标工具所需的 `auth.json` 和 `config.toml`
+- API 密钥不会完整显示 — 预览仅展示首尾各 4 个字符
+- 覆盖写入前自动备份原有文件
 
-- Active model name and version
-- Codex account email, plan, 5-hour usage window, weekly usage window, and reset timing
-- Token limits, temperature, and streaming settings
-- Connection health and uptime status
+### Coding Plan 标记
 
-### Safety Guarantees
+Coding Plan 类型的供应商（Zai Coding、Qwen Coding、Mimo Coding）卡片上会显示 **CP** 徽标，与普通计划一目了然地区分开。
 
-- **Atomic Writes** — All file writes use temp-then-rename strategy to prevent corruption
-- **Automatic Backups** — Overwritten auth/config files are backed up with `.bak.{timestamp}` extension
-- **Permission Lockdown** — Auth files written with `0600` permissions on Unix systems
-- **JWT Expiry Detection** — Token expiration parsed from JWT claims and displayed in the UI
-- **Account ID Hashing** — Profiles display SHA-256 hash of account ID, never raw credentials
+### 提供商仪表盘
 
-## Architecture
+每张卡片概览提供商的配置状态：
 
-| Layer | Technology |
-|-------|------------|
-| Desktop Shell | Tauri v2 (Rust backend + React frontend) |
-| Frontend | React 18, TypeScript, Framer Motion, Phosphor Icons, Tailwind CSS v4 |
-| Backend | Rust with `serde`, `serde_json`, `toml`, `sha2`, `base64` |
-| IPC | Tauri commands exposed from Rust to the React UI |
-| Storage | Local filesystem (`~/.csw/`, `~/.codex/`, `~/.code-switcher/`) |
+- 活跃模型名称和版本
+- Codex 账户邮箱、套餐、5 小时用量窗口、周用量窗口、重置时间
+- Token 限制、温度和流式传输设置
+- 连接健康状态
 
-### File Layout
+### 安全保证
+
+- **原子写入** — 所有文件写入采用临时文件 + rename 策略，防止写入中断导致文件损坏
+- **自动备份** — 每次覆盖的 auth/config 文件都会以 `.bak.{timestamp}` 后缀备份
+- **权限锁定** — Unix 系统下 auth 文件权限设为 `0600`
+- **JWT 过期检测** — 从 JWT 声明中解析 token 过期时间并在 UI 中展示
+- **账户 ID 哈希** — 配置文件显示账户 ID 的 SHA-256 哈希，从不暴露原始凭证
+
+## 架构
+
+| 层级 | 技术 |
+|------|------|
+| 桌面外壳 | Tauri v2（Rust 后端 + React 前端） |
+| 前端 | React 18、TypeScript、Framer Motion、Phosphor Icons、Tailwind CSS v4 |
+| 后端 | Rust（`serde`、`serde_json`、`toml`、`sha2`、`base64`） |
+| IPC | Rust 通过 Tauri 命令暴露给 React UI |
+| 存储 | 本地文件系统（`~/.csw/`、`~/.codex/`、`~/.code-switcher/`） |
+
+### 文件布局
 
 ```
 ~/.csw/
 ├── config/
-│   ├── claude/            # Provider JSON, e.g. anthropic.json, deepseek.json
-│   ├── codex/             # Provider JSON, e.g. openai.json, qwen.json
-│   └── gemini/            # Provider JSON, e.g. google.json
-├── prompts/               # Prompt documents
-├── diagrams/              # Architecture and design documents
-├── data/logs.db           # Request logs and usage summaries
-├── backups/               # Backups
-├── profiles/              # Saved Codex auth snapshots
-└── config.json            # Active Codex CLI profile tracker
+│   ├── claude/            # 提供商 JSON，如 anthropic.json、deepseek.json
+│   ├── codex/             # 提供商 JSON，如 openai.json、qwen.json
+│   └── gemini/            # 提供商 JSON，如 google.json
+├── prompts/               # 提示词文档
+├── diagrams/              # 架构和设计文档
+├── data/logs.db           # 请求日志和使用量汇总
+├── backups/               # 备份
+├── profiles/              # 已保存的 Codex auth 快照
+└── config.json            # 活跃 Codex CLI 配置文件追踪
 
 ~/.codex/
-└── auth.json              # Currently active credentials
+└── auth.json              # 当前活跃的凭证
 
 ~/.code-switcher/
-├── custom-providers.json  # Registry of custom providers
-└── providers/             # Per-provider auth.json + config.toml
+├── custom-providers.json  # 自定义提供商注册表
+└── providers/             # 每个提供商的 auth.json + config.toml
 ```
 
-## Getting Started
+## 快速开始
 
-### Prerequisites
+### 前置要求
 
-- **Rust toolchain** — `rustup default stable`
-- **Node.js** — v20 or later
+- **Rust 工具链** — `rustup default stable`
+- **Node.js** — v20 或以上
 
-### Development
+### 开发模式
 
 ```bash
 npm install
-npm run app:dev          # Tauri desktop shell + Vite dev server
+npm run app:dev          # Tauri 桌面应用 + Vite 开发服务器
 ```
 
-`npm run app:dev` is the normal dev entrypoint. Frontend changes hot-reload into the running app. Rust changes require rebuild.
+`npm run app:dev` 是日常开发入口。前端改动会热重载到运行中的应用。Rust 后端改动需要重新构建或重启。
 
-Plain Vite for browser UI checks only (no Tauri commands):
+纯 Vite 模式仅用于浏览器 UI 检查（无法调用 Tauri 命令）：
 
 ```bash
 npm run dev
 ```
 
-### Local File Testing
+### 本地文件测试
 
 ```bash
 npm run app:dev
 ```
 
-Then:
-1. Edit a provider profile in the desktop app
-2. Save or activate the profile
-3. Check the matching JSON under `~/.csw/config/<brand>/`
-4. Restart the app and confirm the profile loads from disk
+然后：
+1. 在桌面应用中编辑一个提供商配置
+2. 保存或激活该配置
+3. 检查 `~/.csw/config/<brand>/` 下对应的 JSON 文件
+4. 重启应用并确认配置从磁盘加载
 
-Codex auth test flow:
-1. Open the Codex provider edit view
-2. Click `Codex Login`; the app runs `codex login` in the background
-3. The app opens the OpenAI auth page returned by the Codex CLI
-4. Codex writes `~/.codex/auth.json` after login succeeds
-5. The app imports it into the current Codex provider
+Codex 认证测试流程：
+1. 打开 Codex 提供商编辑界面
+2. 点击「Codex 登录」；应用在后台运行 `codex login`
+3. 应用会打开 Codex CLI 返回的 OpenAI 认证页面
+4. Codex 登录成功后会写入 `~/.codex/auth.json`
+5. 应用导入该文件到当前 Codex 提供商
 
-Default Codex config generated by the app:
+应用默认生成的 Codex 配置：
 
 ```toml
 [codex]
@@ -137,44 +145,53 @@ model_reasoning_effort = "xhigh"
 approvals_reviewer = "user"
 ```
 
-### Build a Desktop App
+### 构建桌面应用
 
-macOS:
-
-```bash
-npm run tauri:build        # .app bundle
-npm run tauri:build:dmg    # .dmg installer
-```
-
-Build output: `src-tauri/target/release/bundle/macos/code-switcher.app`
-
-Linux (requires Linux environment):
+macOS：
 
 ```bash
-npm run linux:build        # .deb, .rpm, .AppImage
-npm run linux:build:docker # Docker wrapper from macOS
+npm run tauri:build        # .app 应用包
+npm run tauri:build:dmg    # .dmg 安装文件
 ```
 
-Windows: Install Microsoft C++ Build Tools + Rust MSVC toolchain, then `npm run tauri:build`.
+构建产物位置：`src-tauri/target/release/bundle/macos/code-switcher.app`
 
-## CLI
+Linux（需要 Linux 环境）：
 
-The `csw` command provides terminal-based profile management.
+```bash
+npm run linux:build        # .deb、.rpm、.AppImage
+npm run linux:build:docker # 从 macOS 使用 Docker 包装
+```
+
+Windows：安装 Microsoft C++ Build Tools + Rust MSVC 工具链，然后运行 `npm run tauri:build`。
+
+## CLI 命令行工具
+
+`csw` 命令提供终端方式的配置管理。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Autumn0716/code-switcher/main/install.sh | bash
 ```
 
 ```bash
-csw add <name>        # Save current account as a profile
-csw ls                # List all profiles and switch interactively
-csw switch <name>     # Switch to a named profile
-csw current           # Show which profile is active
-csw balance           # Check token usage for current account
-csw rm <name>         # Delete a profile
-csw mv <old> <new>    # Rename a profile
+csw add <name>        # 保存当前账号为配置文件
+csw ls                # 列出所有配置并交互切换
+csw switch <name>     # 切换到指定配置
+csw current           # 显示当前活跃配置
+csw balance           # 查看当前账号的 Token 用量
+csw rm <name>         # 删除配置
+csw mv <old> <new>    # 重命名配置
 ```
 
-## License
+## 发布版本
+
+- **v0.1.0**（2026-05-07）— 首个 Tauri v2 桌面应用发布，macOS Apple Silicon DMG
+  - 多品牌 Provider 管理（Claude / Codex / Gemini）
+  - 基于供应商的文件命名
+  - Coding Plan 卡片标记
+  - 暗色主题删除确认弹窗
+  - 原子 JSON 写入
+
+## 许可证
 
 MIT
