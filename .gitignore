@@ -29,15 +29,13 @@ pyproject.toml
 tests/
 .pytest_cache/
 
-# OpenSpec / AI agent files (not part of the shipped product)
-openspec/
+# AI agent / dev-only files
 .claude/
 .codex/
+.gitnexus/
 AGENTS.md
 CLAUDE.md
 todolist.md
+openspec/
 docs/
 images/
-
-# GitNexus
-.gitnexus/
