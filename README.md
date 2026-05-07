@@ -225,12 +225,13 @@ model_reasoning_effort = "xhigh"
 approvals_reviewer = "user"
 ```
 
-## CLI 命令行工具
+## CLI 命令行工具（历史版本）
 
-`csw` 命令提供终端方式的配置管理。
+> `csw` Python CLI 已迁移至 `pycli` 分支，当前仓库仅保留 Tauri v2 桌面应用。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Autumn0716/code-switcher/main/install.sh | bash
+git checkout pycli
+curl -fsSL https://raw.githubusercontent.com/Autumn0716/code-switcher/pycli/install.sh | bash
 ```
 
 ```bash
