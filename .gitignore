@@ -44,3 +44,4 @@ images/*.png
 !images/icon.png
 !images/readme1.png
 !images/readme2.png
+code_switcher.egg-info/
