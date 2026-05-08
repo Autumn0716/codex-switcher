@@ -16,6 +16,7 @@ import {
   Code,
   ArrowClockwise,
   Trash,
+  Terminal,
 } from "@phosphor-icons/react";
 
 /* ─── Brand icon wrappers ─── */
@@ -66,7 +67,7 @@ function OpenaiIcon({ size = 24 }: { size?: number }) {
 /* ─── Types ─── */
 
 type ProviderBrand = "claude" | "codex" | "gemini";
-type ApiFormat = "claude" | "openai(chat)" | "codex";
+type ApiFormat = "claude" | "openai(chat)" | "codex" | "gemini";
 
 interface BrandMeta {
   id: ProviderBrand;
@@ -147,6 +148,22 @@ interface CodexProfile {
   configToml: string;
 }
 
+interface GeminiProfile {
+  id: string;
+  vendorId?: string;
+  name: string;
+  notes: string;
+  website: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  apiFormat: string;
+  inlineThinkingMode: string;
+  useSeparateProxy: boolean;
+  proxy: string;
+  isActive?: boolean;
+}
+
 interface GenericProfile {
   id: string;
   vendorId?: string;
@@ -154,9 +171,10 @@ interface GenericProfile {
   apiKey: string;
   baseUrl: string;
   model: string;
+  isActive?: boolean;
 }
 
-type ProviderProfile = ClaudeProfile | CodexProfile | GenericProfile;
+type ProviderProfile = ClaudeProfile | CodexProfile | GeminiProfile | GenericProfile;
 type ActiveProfileIds = Record<ProviderBrand, string | null>;
 type ProviderState = {
   profiles?: unknown[];
@@ -394,13 +412,20 @@ approvals_reviewer = "user"`,
   },
 ];
 
-const defaultGeminiProfiles: GenericProfile[] = [
+const defaultGeminiProfiles: GeminiProfile[] = [
   {
     id: "google",
     name: "Google",
+    notes: "",
+    website: "https://aistudio.google.com/app/apikey",
     apiKey: "",
     baseUrl: "https://generativelanguage.googleapis.com",
-    model: "gemini-2.5-pro-preview-05-06",
+    model: "gemini-2.5-pro",
+    apiFormat: "text",
+    inlineThinkingMode: "full",
+    useSeparateProxy: false,
+    proxy: "",
+    isActive: true
   },
 ];
 
@@ -1986,6 +2011,255 @@ function CodexConfigEditor({
   );
 }
 
+/* ─── Gemini Advanced Panel ─── */
+
+function GeminiAdvancedPanel({ accent }: { accent: string }) {
+  const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<string>("read_gemini_settings")
+      .then((json) => {
+        setSettings(JSON.parse(json));
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(String(e));
+        setLoading(false);
+      });
+  }, []);
+
+  const updateSetting = (key: string, value: unknown) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const getNested = (...keys: string[]) => {
+    let current: any = settings;
+    for (const key of keys) {
+      if (current == null || typeof current !== "object") return undefined;
+      current = current[key];
+    }
+    return current;
+  };
+
+  const updateNested = (parentKey: string, key: string, value: unknown) => {
+    setSettings((prev) => {
+      const parentObj = (prev[parentKey] as Record<string, unknown>) || {};
+      return { ...prev, [parentKey]: { ...parentObj, [key]: value } };
+    });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await invoke("write_gemini_settings", { content: JSON.stringify(settings, null, 2) });
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center rounded-lg border border-white/[0.06] bg-zinc-900/20">
+        <PulseDot color={accent} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Terminal size={14} weight="light" style={{ color: accent }} />
+          <h3 className="text-[12px] font-semibold" style={{ color: accent }}>Advanced Settings (settings.json)</h3>
+        </div>
+        {error && <span className="text-[10px] text-red-400">{error}</span>}
+      </div>
+
+      <div className="space-y-4 mb-6">
+        <ToggleRow
+          label="Show Status In Title"
+          checked={getNested("ui", "showStatusInTitle") !== false}
+          onChange={(v) => updateNested("ui", "showStatusInTitle", v)}
+          accent={accent}
+          description="Display Gemini status in the terminal title"
+        />
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[12px] text-zinc-300 block">Inline Thinking Mode</span>
+            <span className="text-[10px] text-zinc-600 block">Configure inline thinking output</span>
+          </div>
+          <select
+            value={getNested("ui", "inlineThinkingMode") as string || "full"}
+            onChange={(e) => updateNested("ui", "inlineThinkingMode", e.target.value)}
+            className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+          >
+            <option value="full">Full</option>
+            <option value="minimal">Minimal</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-full bg-zinc-100 px-5 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-zinc-900 transition-transform hover:bg-white active:scale-[0.97] disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Config"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Gemini Config Editor ─── */
+
+function GeminiConfigEditor({
+  profile,
+  onSave,
+  onBack,
+  accent,
+  mode = "page",
+  saveLabel = "Save",
+}: {
+  profile: GeminiProfile;
+  onSave: (p: GeminiProfile, options?: SaveOptions) => void;
+  onBack: () => void;
+  accent: string;
+  mode?: "page" | "dialog";
+  saveLabel?: string;
+}) {
+  const [local, setLocal] = useState(profile);
+
+  const update = useCallback((key: string, value: string | boolean) => {
+    setLocal((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleVendorSelect = useCallback((vendor: VendorMeta | null) => {
+    setLocal((prev) => ({
+      ...prev,
+      vendorId: vendor?.id,
+      name: vendor?.name ?? prev.name,
+      ...(vendor?.baseUrls.gemini ? { baseUrl: vendor.baseUrls.gemini } : {}),
+    }));
+  }, []);
+
+  const apiFormatOptions = [
+    { value: "text", label: "Text" },
+    { value: "markdown", label: "Markdown" },
+  ];
+
+  return (
+    <motion.main
+      className={`${mode === "dialog" ? "flex h-full min-h-0 flex-col" : "flex-1"} bg-gradient-to-br from-zinc-900/40 via-zinc-950 to-zinc-950`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <header className="flex h-14 items-center justify-between border-b border-white/[0.04] px-8">
+        <div className="flex items-center gap-3">
+          {mode === "page" && (
+            <button
+              onClick={onBack}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition-colors"
+            >
+              <ArrowLeft size={14} weight="light" />
+            </button>
+          )}
+          <div className="flex items-center gap-2">
+            <GeminiIcon size={16} />
+            <span className="text-[13px] text-zinc-300 font-medium">Gemini</span>
+            <CaretRight size={10} weight="light" className="text-zinc-700" />
+            <span className="text-[13px] text-zinc-500">{profile.name}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {mode === "dialog" && (
+            <button
+              onClick={onBack}
+              className="rounded-full border border-white/[0.08] px-4 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-zinc-400 transition-colors hover:border-white/[0.16] hover:text-zinc-200"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            onClick={() => onSave(local, { close: true })}
+            className="rounded-full bg-zinc-100 px-5 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-zinc-900 transition-transform hover:bg-white active:scale-[0.97]"
+          >
+            {saveLabel}
+          </button>
+        </div>
+      </header>
+
+      <section className="min-h-0 flex-1 overflow-y-auto px-6 py-5 lg:px-8">
+        <div className="mx-auto max-w-5xl space-y-4">
+          <VendorSelector
+            brandId="gemini"
+            selectedVendorId={local.vendorId}
+            onSelect={handleVendorSelect}
+            accent={accent}
+          />
+
+          <VendorInfoCard
+            vendor={getVendorById(local.vendorId)}
+            brandAccent={accent}
+            brandIcon={GeminiIcon}
+            brandName="Gemini"
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Globe size={12} weight="light" style={{ color: accent }} />
+                <h3 className="text-[10px] uppercase tracking-[0.2em] font-semibold" style={{ color: accent }}>Provider</h3>
+              </div>
+              <div className="space-y-3">
+                <InputField label="Name" icon={<Cpu size={10} weight="light" />} value={local.name} onChange={(v) => update("name", v)} />
+                <InputField label="API Key" icon={<Key size={10} weight="light" />} value={local.apiKey} onChange={(v) => update("apiKey", v)} type="password" />
+                <InputField label="Base URL" icon={<Globe size={10} weight="light" />} value={local.baseUrl} onChange={(v) => update("baseUrl", v)} />
+                <InputField label="Website" icon={<LinkIcon size={10} weight="light" />} value={local.website} onChange={(v) => update("website", v)} placeholder="https://..." />
+                <InputField label="Notes" icon={<TextAlignLeft size={10} weight="light" />} value={local.notes} onChange={(v) => update("notes", v)} placeholder="Optional remarks" />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Cpu size={12} weight="light" style={{ color: accent }} />
+                <h3 className="text-[10px] uppercase tracking-[0.2em] font-semibold" style={{ color: accent }}>Model & Options</h3>
+              </div>
+              <ModelSelector brand="gemini" baseUrl={local.baseUrl} apiKey={local.apiKey} vendorId={local.vendorId} currentValue={local.model} onSelect={(m) => update("model", m)} accent={accent} />
+              <div className="grid grid-cols-1 gap-3 mt-3">
+                <InputField label="Model" icon={<Cpu size={10} weight="light" />} value={local.model} onChange={(v) => update("model", v)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <SelectField label="API Format" icon={<Code size={10} weight="light" />} value={local.apiFormat} onChange={(v) => update("apiFormat", v)} options={apiFormatOptions} />
+              </div>
+              <div className="mt-3 space-y-1">
+                <ToggleRow label="Separate Proxy" checked={local.useSeparateProxy} onChange={(v) => update("useSeparateProxy", v)} accent={accent} description="Use a separate proxy configuration" />
+                {local.useSeparateProxy && (
+                  <div className="pt-2">
+                    <InputField label="Proxy URL" icon={<Globe size={10} weight="light" />} value={local.proxy} onChange={(v) => update("proxy", v)} placeholder="http://127.0.0.1:7890" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <GeminiAdvancedPanel accent={accent} />
+        </div>
+      </section>
+    </motion.main>
+  );
+}
+
 /* ─── Generic Config Editor (Gemini placeholder) ─── */
 
 function GenericConfigEditor({
@@ -2515,6 +2789,15 @@ function AddProfileDialog({
             saveLabel="Confirm"
             autoSaveAuth={false}
           />
+        ) : draft.brand === "gemini" ? (
+          <GeminiConfigEditor
+            profile={draft.profile as GeminiProfile}
+            onSave={(profile) => onConfirm(profile)}
+            onBack={onCancel}
+            accent={brand.accent}
+            mode="dialog"
+            saveLabel="Confirm"
+          />
         ) : (
           <GenericConfigEditor
             brand={brand}
@@ -2546,7 +2829,7 @@ export default function App() {
   const [activeProfileIds, setActiveProfileIds] = useState<ActiveProfileIds>(defaultActiveProfileIds);
   const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfile[]>(defaultClaudeProfiles);
   const [codexProfiles, setCodexProfiles] = useState<CodexProfile[]>(defaultCodexProfiles);
-  const [geminiProfiles, setGeminiProfiles] = useState<GenericProfile[]>(defaultGeminiProfiles);
+  const [geminiProfiles, setGeminiProfiles] = useState<GeminiProfile[]>(defaultGeminiProfiles);
   const [codexUsageById, setCodexUsageById] = useState<Record<string, CodexUsageState>>({});
   const codexUsageInFlight = useRef<Set<string>>(new Set());
   const [codexUsageInitialLoadDone, setCodexUsageInitialLoadDone] = useState(false);
@@ -2578,7 +2861,7 @@ export default function App() {
           }));
         }
       } else {
-        const profiles = profilesFromState<GenericProfile>(state);
+        const profiles = profilesFromState<GeminiProfile>(state);
         if (profiles) {
           setGeminiProfiles(profiles);
           setActiveProfileIds((prev) => ({
@@ -2806,7 +3089,7 @@ export default function App() {
     }
   };
 
-  const handleSaveGemini = async (updated: GenericProfile, options: SaveOptions = { close: true }) => {
+  const handleSaveGemini = async (updated: GeminiProfile, options: SaveOptions = { close: true }) => {
     if (activeProfileIdx !== null) {
       setGeminiProfiles((prev) =>
         prev.map((p, i) => (i === activeProfileIdx ? updated : p))
@@ -2894,7 +3177,7 @@ export default function App() {
     } else if (draftBrand === "codex") {
       setCodexProfiles((prev) => [...prev, profileWithFinalId as CodexProfile]);
     } else {
-      setGeminiProfiles((prev) => [...prev, profileWithFinalId as GenericProfile]);
+      setGeminiProfiles((prev) => [...prev, profileWithFinalId as GeminiProfile]);
     }
 
     setSelectedProfileIdx(nextIndex);
@@ -2980,12 +3263,20 @@ export default function App() {
               onBack={goBack}
               accent={brand.accent}
             />
+          ) : activeBrand === "gemini" ? (
+            <GeminiConfigEditor
+              key={`config-${activeBrand}-${activeProfileIdx}`}
+              profile={geminiProfiles[activeProfileIdx] as GeminiProfile}
+              onSave={handleSaveGemini}
+              onBack={goBack}
+              accent={brand.accent}
+            />
           ) : (
             <GenericConfigEditor
               key={`config-${activeBrand}-${activeProfileIdx}`}
               brand={brand}
-              profile={geminiProfiles[activeProfileIdx]}
-              onSave={handleSaveGemini}
+              profile={geminiProfiles[activeProfileIdx] as any}
+              onSave={handleSaveGemini as any}
               onBack={goBack}
             />
           )

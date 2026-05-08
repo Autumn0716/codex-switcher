@@ -25,6 +25,8 @@ pub fn run() {
             profiles::fetch_available_models,
             profiles::read_claude_settings,
             profiles::write_claude_settings,
+            profiles::read_gemini_settings,
+            profiles::write_gemini_settings,
             profiles::read_codex_config,
             profiles::write_codex_config,
         ])

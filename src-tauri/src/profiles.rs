@@ -104,6 +104,24 @@ impl CswPaths {
             .join(".claude")
             .join("settings.json")
     }
+
+    fn gemini_settings_file(&self) -> PathBuf {
+        self.config_file
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| Path::new("."))
+            .join(".gemini")
+            .join("settings.json")
+    }
+
+    fn gemini_env_file(&self) -> PathBuf {
+        self.config_file
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| Path::new("."))
+            .join(".gemini")
+            .join(".env")
+    }
 }
 
 #[derive(Debug, Error)]
@@ -624,6 +642,8 @@ fn activate_provider_profile_with_paths(
         apply_claude_provider_settings(paths, &selected_profile)?;
     } else if brand == "codex" {
         apply_codex_provider_runtime_files(paths, &selected_profile)?;
+    } else if brand == "gemini" {
+        apply_gemini_provider_settings(paths, &selected_profile)?;
     }
 
     for path in provider_profile_paths(&dir)? {
@@ -728,6 +748,68 @@ fn apply_claude_provider_settings(paths: &CswPaths, profile: &Value) -> AppResul
     );
 
     settings.insert("env".to_string(), Value::Object(env));
+    write_json_atomic(&settings_path, &Value::Object(settings))
+}
+
+fn apply_gemini_provider_settings(paths: &CswPaths, profile: &Value) -> AppResult<()> {
+    let settings_path = paths.gemini_settings_file();
+    let mut settings = match read_json_optional(&settings_path)? {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    };
+
+    let env_path = paths.gemini_env_file();
+    let mut env_content = String::new();
+    let api_key = profile_string(profile, "apiKey").unwrap_or("");
+    let base_url = profile_string(profile, "baseUrl").unwrap_or("");
+
+    if !api_key.is_empty() {
+        env_content.push_str(&format!("GEMINI_API_KEY=\"{}\"\n", api_key));
+    }
+    if !base_url.is_empty() {
+        env_content.push_str(&format!("GEMINI_BASE_URL=\"{}\"\n", base_url));
+    }
+
+    if profile_bool(profile, "useSeparateProxy") {
+        if let Some(proxy) = profile_string(profile, "proxy") {
+            env_content.push_str(&format!("HTTPS_PROXY=\"{}\"\n", proxy));
+            env_content.push_str(&format!("HTTP_PROXY=\"{}\"\n", proxy));
+        }
+    }
+
+    write_atomic(&env_path, env_content.as_bytes())?;
+
+    // Update settings.json if needed
+    // Usually settings.json contains: security.auth.selectedType: "apiKey" or "oauth-personal"
+    if !api_key.is_empty() {
+        let mut security = settings.remove("security").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        let mut auth = security.remove("auth").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        auth.insert("selectedType".to_string(), Value::String("apiKey".to_string()));
+        security.insert("auth".to_string(), Value::Object(auth));
+        settings.insert("security".to_string(), Value::Object(security));
+    } else {
+        let mut security = settings.remove("security").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        let mut auth = security.remove("auth").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        auth.insert("selectedType".to_string(), Value::String("oauth-personal".to_string()));
+        security.insert("auth".to_string(), Value::Object(auth));
+        settings.insert("security".to_string(), Value::Object(security));
+    }
+
+    if let Some(model) = profile_string(profile, "model") {
+        settings.insert("model".to_string(), Value::String(model.to_string()));
+    }
+    if let Some(format) = profile_string(profile, "apiFormat") {
+        let mut output = settings.remove("output").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        output.insert("format".to_string(), Value::String(format.to_string()));
+        settings.insert("output".to_string(), Value::Object(output));
+    }
+
+    let mut ui = settings.remove("ui").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+    if let Some(inline) = profile_string(profile, "inlineThinkingMode") {
+        ui.insert("inlineThinkingMode".to_string(), Value::String(inline.to_string()));
+    }
+    settings.insert("ui".to_string(), Value::Object(ui));
+
     write_json_atomic(&settings_path, &Value::Object(settings))
 }
 
@@ -1663,7 +1745,7 @@ fn should_restore_default_provider_profile(brand: &str, profile: &Value) -> bool
         "gemini" => {
             profile.get("id").and_then(Value::as_str) == Some("google")
                 && profile.get("baseUrl").and_then(Value::as_str)
-                    == Some("https://generativelanguage.googleapis.com/v1beta")
+                    == Some("https://generativelanguage.googleapis.com")
                 && profile.get("model").and_then(Value::as_str) == Some("gemini-2.5-pro")
         }
         _ => false,
@@ -1745,9 +1827,15 @@ fn default_provider_profile(brand: &str) -> AppResult<Value> {
         "gemini" => Ok(json!({
             "id": "google",
             "name": "Google",
+            "notes": "",
+            "website": "https://aistudio.google.com/app/apikey",
             "apiKey": "",
             "baseUrl": "https://generativelanguage.googleapis.com",
-            "model": "gemini-2.5-pro-preview-05-06",
+            "model": "gemini-2.5-pro",
+            "apiFormat": "text",
+            "inlineThinkingMode": "full",
+            "useSeparateProxy": false,
+            "proxy": "",
             "isActive": true
         })),
         _ => Err(AppError::Message(
@@ -2593,6 +2681,42 @@ pub fn write_claude_settings(content: String) -> AppResult<()> {
         .map_err(|e| AppError::Message(format!("Invalid JSON: {}", e)))?;
 
     let path = claude_settings_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| AppError::Message(format!("Failed to create directory: {}", e)))?;
+    }
+    fs::write(&path, &content)
+        .map_err(|e| AppError::Message(format!("Failed to write settings.json: {}", e)))?;
+    Ok(())
+}
+
+/* ─── Gemini settings.json read/write ─── */
+
+fn gemini_settings_path() -> AppResult<PathBuf> {
+    let home = dirs::home_dir().ok_or(AppError::HomeDirectoryUnavailable)?;
+    Ok(home.join(".gemini").join("settings.json"))
+}
+
+#[tauri::command]
+pub fn read_gemini_settings() -> AppResult<String> {
+    let path = gemini_settings_path()?;
+    if path.exists() {
+        let content = fs::read_to_string(&path)
+            .map_err(|e| AppError::Message(format!("Failed to read settings.json: {}", e)))?;
+        serde_json::from_str::<Value>(&content)
+            .map_err(|e| AppError::Message(format!("Invalid JSON in settings.json: {}", e)))?;
+        Ok(content)
+    } else {
+        Ok("{}".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn write_gemini_settings(content: String) -> AppResult<()> {
+    serde_json::from_str::<Value>(&content)
+        .map_err(|e| AppError::Message(format!("Invalid JSON: {}", e)))?;
+
+    let path = gemini_settings_path()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| AppError::Message(format!("Failed to create directory: {}", e)))?;
