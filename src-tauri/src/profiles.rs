@@ -122,6 +122,24 @@ impl CswPaths {
             .join(".gemini")
             .join(".env")
     }
+
+    fn gemini_oauth_creds_file(&self) -> PathBuf {
+        self.config_file
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| Path::new("."))
+            .join(".gemini")
+            .join("oauth_creds.json")
+    }
+
+    fn gemini_google_accounts_file(&self) -> PathBuf {
+        self.config_file
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| Path::new("."))
+            .join(".gemini")
+            .join("google_accounts.json")
+    }
 }
 
 #[derive(Debug, Error)]
@@ -362,6 +380,59 @@ pub fn start_codex_login() -> AppResult<CodexLoginLaunch> {
 #[tauri::command]
 pub fn import_codex_auth(profile: Value, require_modified_after: Option<u64>) -> AppResult<Value> {
     import_codex_auth_with_paths(&CswPaths::production()?, profile, require_modified_after)
+}
+
+#[tauri::command]
+pub fn import_gemini_auth(profile: Value, require_modified_after: Option<u64>) -> AppResult<Value> {
+    import_gemini_auth_with_paths(&CswPaths::production()?, profile, require_modified_after)
+}
+
+fn import_gemini_auth_with_paths(
+    paths: &CswPaths,
+    profile: Value,
+    require_modified_after: Option<u64>,
+) -> AppResult<Value> {
+    let auth_file = paths.gemini_oauth_creds_file();
+    if let Some(required_modified_at) = require_modified_after {
+        let Some(actual_modified_at) = modified_seconds(&auth_file)? else {
+            return Err(AppError::Message(format!(
+                "{} not found. Finish Gemini login first.",
+                auth_file.display()
+            )));
+        };
+        if actual_modified_at <= required_modified_at {
+            return Err(AppError::Message(format!(
+                "{} has not changed since Gemini login started.",
+                auth_file.display()
+            )));
+        }
+    }
+
+    let creds = read_json(&auth_file)?;
+    let auth_json = serde_json::to_string_pretty(&creds).map_err(|error| {
+        AppError::Message(format!(
+            "Could not serialize {}: {error}",
+            auth_file.display()
+        ))
+    })?;
+
+    let mut profile = match profile {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
+    profile.insert("authJson".to_string(), Value::String(auth_json));
+
+    // Try to extract email from google_accounts.json if it exists
+    let accounts_file = paths.gemini_google_accounts_file();
+    if accounts_file.exists() {
+        if let Ok(accounts) = read_json(&accounts_file) {
+            if let Some(email) = accounts.get("active").and_then(Value::as_str) {
+                profile.insert("accountEmail".to_string(), Value::String(email.to_string()));
+            }
+        }
+    }
+
+    Ok(Value::Object(profile))
 }
 
 #[tauri::command]

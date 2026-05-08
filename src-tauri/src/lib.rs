@@ -20,6 +20,7 @@ pub fn run() {
             profiles::remove_provider_profile,
             profiles::start_codex_login,
             profiles::import_codex_auth,
+            profiles::import_gemini_auth,
             profiles::fetch_codex_provider_usage,
             profiles::open_external_url,
             profiles::fetch_available_models,

@@ -162,6 +162,8 @@ interface GeminiProfile {
   useSeparateProxy: boolean;
   proxy: string;
   isActive?: boolean;
+  authMode: string;
+  authJson: string;
 }
 
 interface GenericProfile {
@@ -425,7 +427,9 @@ const defaultGeminiProfiles: GeminiProfile[] = [
     inlineThinkingMode: "full",
     useSeparateProxy: false,
     proxy: "",
-    isActive: true
+    isActive: true,
+    authMode: "gemini",
+    authJson: `{\n  "auth_mode": "gemini",\n  "GEMINI_API_KEY": null,\n  "tokens": {\n    "id_token": "",\n    "access_token": "",\n    "refresh_token": "",\n    "account_id": ""\n  },\n  "last_refresh": ""\n}`
   },
 ];
 
@@ -1468,7 +1472,7 @@ function ClaudeConfigEditor({
 }) {
   const [local, setLocal] = useState(profile);
   const [copied, setCopied] = useState(false);
-  const [showJson, setShowJson] = useState(false);
+  const [showJson, setShowJson] = useState(true);
 
   const update = useCallback((key: string, value: string | boolean) => {
     setLocal((prev) => ({ ...prev, [key]: value }));
@@ -1679,8 +1683,8 @@ function CodexConfigEditor({
 }) {
   const [local, setLocal] = useState(profile);
   const [copied, setCopied] = useState(false);
-  const [showAuthJson, setShowAuthJson] = useState(false);
-  const [showToml, setShowToml] = useState(false);
+  const [showAuthJson, setShowAuthJson] = useState(true);
+  const [showToml, setShowToml] = useState(true);
   const [authStatus, setAuthStatus] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const [loginBaseline, setLoginBaseline] = useState<number | null | undefined>(undefined);
@@ -2015,14 +2019,17 @@ function CodexConfigEditor({
 
 function GeminiAdvancedPanel({ accent }: { accent: string }) {
   const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const [rawSettings, setRawSettings] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showJson, setShowJson] = useState(true);
 
   useEffect(() => {
     invoke<string>("read_gemini_settings")
       .then((json) => {
         setSettings(JSON.parse(json));
+        setRawSettings(json);
         setLoading(false);
       })
       .catch((e) => {
@@ -2032,7 +2039,11 @@ function GeminiAdvancedPanel({ accent }: { accent: string }) {
   }, []);
 
   const updateSetting = (key: string, value: unknown) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    setSettings((prev) => {
+      const newSettings = { ...prev, [key]: value };
+      setRawSettings(JSON.stringify(newSettings, null, 2));
+      return newSettings;
+    });
   };
 
   const getNested = (...keys: string[]) => {
@@ -2047,17 +2058,30 @@ function GeminiAdvancedPanel({ accent }: { accent: string }) {
   const updateNested = (parentKey: string, key: string, value: unknown) => {
     setSettings((prev) => {
       const parentObj = (prev[parentKey] as Record<string, unknown>) || {};
-      return { ...prev, [parentKey]: { ...parentObj, [key]: value } };
+      const newSettings = { ...prev, [parentKey]: { ...parentObj, [key]: value } };
+      setRawSettings(JSON.stringify(newSettings, null, 2));
+      return newSettings;
     });
+  };
+
+  const handleRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setRawSettings(e.target.value);
+    try {
+      setSettings(JSON.parse(e.target.value));
+      setError(null);
+    } catch {
+      // Ignore JSON parse errors while typing, but keep the raw string
+    }
   };
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
-      await invoke("write_gemini_settings", { content: JSON.stringify(settings, null, 2) });
+      JSON.parse(rawSettings); // Validate JSON
+      await invoke("write_gemini_settings", { content: rawSettings });
     } catch (e) {
-      setError(String(e));
+      setError("Invalid JSON format");
     } finally {
       setSaving(false);
     }
@@ -2078,7 +2102,12 @@ function GeminiAdvancedPanel({ accent }: { accent: string }) {
           <Terminal size={14} weight="light" style={{ color: accent }} />
           <h3 className="text-[12px] font-semibold" style={{ color: accent }}>Advanced Settings (settings.json)</h3>
         </div>
-        {error && <span className="text-[10px] text-red-400">{error}</span>}
+        <div className="flex items-center gap-2">
+          {error && <span className="text-[10px] text-red-400 mr-2">{error}</span>}
+          <button onClick={() => setShowJson(!showJson)} className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors">
+            {showJson ? "Hide" : "Show"}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4 mb-6">
@@ -2104,7 +2133,90 @@ function GeminiAdvancedPanel({ accent }: { accent: string }) {
             <option value="hidden">Hidden</option>
           </select>
         </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[12px] text-zinc-300 block">Theme</span>
+            <span className="text-[10px] text-zinc-600 block">CLI UI Theme</span>
+          </div>
+          <select
+            value={getNested("theme") as string || "auto"}
+            onChange={(e) => updateSetting("theme", e.target.value)}
+            className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+          >
+            <option value="auto">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+        <ToggleRow
+          label="Vim Mode"
+          checked={getNested("general", "vimMode") === true}
+          onChange={(v) => updateNested("general", "vimMode", v)}
+          accent={accent}
+          description="Enable Vim keybindings in CLI"
+        />
+        <ToggleRow
+          label="Sandbox Mode"
+          checked={getNested("sandbox") === true}
+          onChange={(v) => updateSetting("sandbox", v)}
+          accent={accent}
+          description="Run shell commands in a container"
+        />
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[12px] text-zinc-300 block">Default Approval Mode</span>
+            <span className="text-[10px] text-zinc-600 block">Configure tool confirmation logic</span>
+          </div>
+          <select
+            value={getNested("general", "defaultApprovalMode") as string || "default"}
+            onChange={(e) => updateNested("general", "defaultApprovalMode", e.target.value)}
+            className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+          >
+            <option value="default">Default</option>
+            <option value="auto_edit">Auto Edit</option>
+            <option value="plan">Plan</option>
+            <option value="yolo">Yolo</option>
+          </select>
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[12px] text-zinc-300 block">Max Turns</span>
+            <span className="text-[10px] text-zinc-600 block">Limit conversation history</span>
+          </div>
+          <input
+            type="number"
+            value={(getNested("model", "maxTurns") as number) || ""}
+            onChange={(e) => updateNested("model", "maxTurns", parseInt(e.target.value) || undefined)}
+            className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+            placeholder="No Limit"
+          />
+        </div>
+        <ToggleRow
+          label="Show Line Numbers"
+          checked={getNested("ui", "showLineNumbers") === true}
+          onChange={(v) => updateNested("ui", "showLineNumbers", v)}
+          accent={accent}
+          description="Display line numbers in code blocks"
+        />
+        <ToggleRow
+          label="Usage Statistics"
+          checked={getNested("usageStatisticsEnabled") === true}
+          onChange={(v) => updateSetting("usageStatisticsEnabled", v)}
+          accent={accent}
+          description="Send anonymous usage data to Google"
+        />
       </div>
+
+      {showJson && (
+        <div className="mb-6">
+          <textarea
+            value={rawSettings}
+            onChange={handleRawChange}
+            className="w-full h-48 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-[10px] font-mono text-zinc-300 focus:border-zinc-600 focus:outline-none resize-y"
+            spellCheck={false}
+          />
+        </div>
+      )}
 
       <div className="flex justify-end">
         <button
@@ -2128,6 +2240,7 @@ function GeminiConfigEditor({
   accent,
   mode = "page",
   saveLabel = "Save",
+  autoSaveAuth = true,
 }: {
   profile: GeminiProfile;
   onSave: (p: GeminiProfile, options?: SaveOptions) => void;
@@ -2135,8 +2248,83 @@ function GeminiConfigEditor({
   accent: string;
   mode?: "page" | "dialog";
   saveLabel?: string;
+  autoSaveAuth?: boolean;
 }) {
   const [local, setLocal] = useState(profile);
+  const [copied, setCopied] = useState(false);
+  const [showAuthJson, setShowAuthJson] = useState(true);
+  const [showSettingsJson, setShowSettingsJson] = useState(true);
+  const [authStatus, setAuthStatus] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+
+  // Advanced settings state
+  const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const [rawSettings, setRawSettings] = useState<string>("");
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<string>("read_gemini_settings")
+      .then((json) => {
+        setSettings(JSON.parse(json));
+        setRawSettings(json);
+        setSettingsLoading(false);
+      })
+      .catch((e) => {
+        setSettingsError(String(e));
+        setSettingsLoading(false);
+      });
+  }, []);
+
+  const updateSetting = (key: string, value: unknown) => {
+    setSettings((prev) => {
+      const newSettings = { ...prev, [key]: value };
+      setRawSettings(JSON.stringify(newSettings, null, 2));
+      return newSettings;
+    });
+  };
+
+  const getNested = (...keys: string[]) => {
+    let current: any = settings;
+    for (const key of keys) {
+      if (current == null || typeof current !== "object") return undefined;
+      current = current[key];
+    }
+    return current;
+  };
+
+  const updateNested = (parentKey: string, key: string, value: unknown) => {
+    setSettings((prev) => {
+      const parentObj = (prev[parentKey] as Record<string, unknown>) || {};
+      const newSettings = { ...prev, [parentKey]: { ...parentObj, [key]: value } };
+      setRawSettings(JSON.stringify(newSettings, null, 2));
+      return newSettings;
+    });
+  };
+
+  const handleRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setRawSettings(e.target.value);
+    try {
+      setSettings(JSON.parse(e.target.value));
+      setSettingsError(null);
+    } catch {
+      // Ignore JSON parse errors while typing
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsError(null);
+    try {
+      JSON.parse(rawSettings); // Validate JSON
+      await invoke("write_gemini_settings", { content: rawSettings });
+    } catch (e) {
+      setSettingsError("Invalid JSON format");
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
 
   const update = useCallback((key: string, value: string | boolean) => {
     setLocal((prev) => ({ ...prev, [key]: value }));
@@ -2150,6 +2338,44 @@ function GeminiConfigEditor({
       ...(vendor?.baseUrls.gemini ? { baseUrl: vendor.baseUrls.gemini } : {}),
     }));
   }, []);
+
+  const importGeminiAuth = useCallback(
+    async (requireModifiedAfter?: number | null) => {
+      setAuthBusy(true);
+      try {
+        const imported = await invoke<GeminiProfile>("import_gemini_auth", {
+          profile: local,
+          requireModifiedAfter,
+        });
+        setLocal(imported);
+        if (autoSaveAuth) {
+          onSave(imported, { close: false });
+        }
+        setAuthStatus("Imported ~/.gemini/credentials.json");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setAuthStatus(message);
+        throw error;
+      } finally {
+        setAuthBusy(false);
+      }
+    },
+    [autoSaveAuth, local, onSave],
+  );
+
+  const handleImportAuthJson = async () => {
+    try {
+      await importGeminiAuth();
+    } catch {
+      // importGeminiAuth already reports the backend error in the status line.
+    }
+  };
+
+  const handleCopyAuth = () => {
+    navigator.clipboard.writeText(local.authJson);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const apiFormatOptions = [
     { value: "text", label: "Text" },
@@ -2201,19 +2427,42 @@ function GeminiConfigEditor({
 
       <section className="min-h-0 flex-1 overflow-y-auto px-6 py-5 lg:px-8">
         <div className="mx-auto max-w-5xl space-y-4">
-          <VendorSelector
-            brandId="gemini"
-            selectedVendorId={local.vendorId}
-            onSelect={handleVendorSelect}
-            accent={accent}
-          />
+          {/* Row 1: Vendor Selector */}
+          <VendorSelector brandId="gemini" selectedVendorId={local.vendorId} onSelect={handleVendorSelect} accent={accent} />
 
+          {/* Vendor Info Card */}
           <VendorInfoCard
             vendor={getVendorById(local.vendorId)}
             brandAccent={accent}
             brandIcon={GeminiIcon}
             brandName="Gemini"
           />
+
+          {/* Auth Card */}
+          <div className="relative overflow-hidden rounded-xl border" style={{ borderColor: `${accent}40`, background: `linear-gradient(135deg, ${accent}08 0%, transparent 60%)` }}>
+            <div className="pointer-events-none absolute -top-12 -right-12 h-24 w-24 rounded-full opacity-[0.06]" style={{ background: `radial-gradient(circle, ${accent} 0%, transparent 70%)` }} />
+            <div className="relative p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}15`, border: `1px solid ${accent}25` }}>
+                    <GeminiIcon size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-[11px] uppercase tracking-[0.15em] font-semibold" style={{ color: accent }}>Authentication</h3>
+                      <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[8px] font-mono text-zinc-500">~/.gemini/credentials.json</span>
+                    </div>
+                    {authStatus && <p className="text-[10px] text-zinc-500 mt-0.5">{authStatus}</p>}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleImportAuthJson} disabled={authBusy} className="rounded-full border border-white/[0.12] bg-black/20 px-3 py-1.5 text-[10px] uppercase tracking-[0.12em] font-semibold text-zinc-200 transition-colors hover:border-white/[0.22] disabled:opacity-50">
+                    Import Credentials
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4">
@@ -2253,7 +2502,172 @@ function GeminiConfigEditor({
             </div>
           </div>
 
-          <GeminiAdvancedPanel accent={accent} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Key size={12} weight="light" style={{ color: accent }} />
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] font-semibold" style={{ color: accent }}>oauth_creds.json</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowAuthJson(!showAuthJson)} className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors">
+                    {showAuthJson ? "Hide" : "Show"}
+                  </button>
+                  <button onClick={handleCopyAuth} className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors">
+                    {copied ? <Check size={10} /> : <Copy size={10} />}
+                  </button>
+                </div>
+              </div>
+              {showAuthJson ? (
+                <textarea value={local.authJson} onChange={(e) => update("authJson", e.target.value)} className="w-full mt-3 h-48 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-[10px] font-mono text-zinc-300 focus:border-zinc-600 focus:outline-none resize-y" spellCheck={false} />
+              ) : (
+                <div className="mt-3 flex items-center justify-center h-24 rounded-lg border border-dashed border-white/[0.06]">
+                  <p className="text-[10px] text-zinc-700">Click Show to edit oauth_creds.json</p>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Terminal size={12} weight="light" style={{ color: accent }} />
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] font-semibold" style={{ color: accent }}>settings.json</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  {settingsError && <span className="text-[10px] text-red-400">{settingsError}</span>}
+                  <button onClick={() => setShowSettingsJson(!showSettingsJson)} className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors">
+                    {showSettingsJson ? "Hide" : "Show"}
+                  </button>
+                  <button onClick={handleSaveSettings} disabled={settingsSaving} className="flex items-center gap-1 text-[10px] uppercase font-semibold tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-50">
+                    {settingsSaving ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
+              {showSettingsJson ? (
+                <textarea
+                  value={rawSettings}
+                  onChange={handleRawChange}
+                  className="w-full mt-3 h-48 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-[10px] font-mono text-zinc-300 focus:border-zinc-600 focus:outline-none resize-y"
+                  spellCheck={false}
+                />
+              ) : (
+                <div className="mt-3 flex items-center justify-center h-24 rounded-lg border border-dashed border-white/[0.06]">
+                  <p className="text-[10px] text-zinc-700">Click Show to edit settings.json</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom: Advanced Settings Toggles */}
+          <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-5">
+            <div className="flex items-center gap-2 mb-6">
+              <Terminal size={14} weight="light" style={{ color: accent }} />
+              <h3 className="text-[12px] font-semibold" style={{ color: accent }}>Advanced Configuration</h3>
+            </div>
+
+            {settingsLoading ? (
+              <div className="flex h-32 items-center justify-center">
+                <PulseDot color={accent} />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <ToggleRow
+                  label="Show Status In Title"
+                  checked={getNested("ui", "showStatusInTitle") !== false}
+                  onChange={(v) => updateNested("ui", "showStatusInTitle", v)}
+                  accent={accent}
+                  description="Display Gemini status in the terminal title"
+                />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[12px] text-zinc-300 block">Inline Thinking Mode</span>
+                    <span className="text-[10px] text-zinc-600 block">Configure inline thinking output</span>
+                  </div>
+                  <select
+                    value={getNested("ui", "inlineThinkingMode") as string || "full"}
+                    onChange={(e) => updateNested("ui", "inlineThinkingMode", e.target.value)}
+                    className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+                  >
+                    <option value="full">Full</option>
+                    <option value="minimal">Minimal</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[12px] text-zinc-300 block">Theme</span>
+                    <span className="text-[10px] text-zinc-600 block">CLI UI Theme</span>
+                  </div>
+                  <select
+                    value={getNested("theme") as string || "auto"}
+                    onChange={(e) => updateSetting("theme", e.target.value)}
+                    className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                  </select>
+                </div>
+                <ToggleRow
+                  label="Vim Mode"
+                  checked={getNested("general", "vimMode") === true}
+                  onChange={(v) => updateNested("general", "vimMode", v)}
+                  accent={accent}
+                  description="Enable Vim keybindings in CLI"
+                />
+                <ToggleRow
+                  label="Sandbox Mode"
+                  checked={getNested("sandbox") === true}
+                  onChange={(v) => updateSetting("sandbox", v)}
+                  accent={accent}
+                  description="Run shell commands in a container"
+                />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[12px] text-zinc-300 block">Default Approval Mode</span>
+                    <span className="text-[10px] text-zinc-600 block">Configure tool confirmation logic</span>
+                  </div>
+                  <select
+                    value={getNested("general", "defaultApprovalMode") as string || "default"}
+                    onChange={(e) => updateNested("general", "defaultApprovalMode", e.target.value)}
+                    className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+                  >
+                    <option value="default">Default</option>
+                    <option value="auto_edit">Auto Edit</option>
+                    <option value="plan">Plan</option>
+                    <option value="yolo">Yolo</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[12px] text-zinc-300 block">Max Turns</span>
+                    <span className="text-[10px] text-zinc-600 block">Limit conversation history</span>
+                  </div>
+                  <input
+                    type="number"
+                    value={(getNested("model", "maxTurns") as number) || ""}
+                    onChange={(e) => updateNested("model", "maxTurns", parseInt(e.target.value) || undefined)}
+                    className="w-32 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 outline-none focus:border-white/[0.2]"
+                    placeholder="No Limit"
+                  />
+                </div>
+                <ToggleRow
+                  label="Show Line Numbers"
+                  checked={getNested("ui", "showLineNumbers") === true}
+                  onChange={(v) => updateNested("ui", "showLineNumbers", v)}
+                  accent={accent}
+                  description="Display line numbers in code blocks"
+                />
+                <ToggleRow
+                  label="Usage Statistics"
+                  checked={getNested("usageStatisticsEnabled") === true}
+                  onChange={(v) => updateSetting("usageStatisticsEnabled", v)}
+                  accent={accent}
+                  description="Send anonymous usage data to Google"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </section>
     </motion.main>
